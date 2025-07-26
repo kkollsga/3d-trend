@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mean Converging Transform Visualizer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+</head>
+<body class="bg-gray-100">
+    <div class="p-6 max-w-6xl mx-auto">
+        <h1 class="text-2xl font-bold mb-6">Mean Converging Transform Visualizer</h1>
+        
+        <!-- Chart Container -->
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+            <canvas id="transformChart" width="800" height="400"></canvas>
+        </div>
+        
+        <!-- Controls -->
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+            <!-- Target Mean Slider -->
+            <div class="mb-6">
+                <label class="block text-sm font-medium text-gray-700 mb-2">
+                    Target Mean (μ_target): <span id="muTargetValue">0.500</span>
+                </label>
+                <input type="range" id="muTargetSlider" min="0" max="1" step="0.001" value="0.5"
+                       class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+            </div>
+            
+            <!-- Green Curve Method Selector -->
+            <div class="mb-6">
+                <label class="block text-sm font-medium text-gray-700 mb-2">
+                    Green Curve Method
+                </label>
+                <select id="greenCurveMethod" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                    <option value="power">Power Transform</option>
+                    <option value="geometric">Geometric Mean Transform</option>
+                    <option value="multiplicative">Multiplicative Scaling</option>
+                </select>
+            </div>
+            
+            <!-- Compression Factor (only for power transform) -->
+            <div id="compressionFactorContainer" class="mb-6">
+                <label class="block text-sm font-medium text-gray-700 mb-2">
+                    Compression Factor: <span id="compressionFactorValue">2.00</span>
+                </label>
+                <input type="range" id="compressionFactorSlider" min="0" max="2" step="0.01" value="2"
+                       class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+            </div>
+            
+            <!-- Options and Buttons -->
+            <div class="flex items-center justify-between mb-6">
+                <div class="flex items-center">
+                    <input type="checkbox" id="smoothLines" checked
+                           class="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
+                    <label for="smoothLines" class="text-sm font-medium text-gray-700">
+                        Smooth Lines
+                    </label>
+                </div>
+                
+                <div class="flex gap-2">
+                    <button id="generateRandom" class="px-3 py-1 bg-blue-500 text-white text-sm rounded hover:bg-blue-600 transition-colors">
+                        <i class="fas fa-random mr-1"></i> Generate Random
+                    </button>
+                    <button id="restoreOriginal" class="px-3 py-1 bg-gray-500 text-white text-sm rounded hover:bg-gray-600 transition-colors">
+                        <i class="fas fa-undo mr-1"></i> Restore Original
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Statistics Display -->
+            <div class="bg-gray-50 p-4 rounded text-sm">
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <span class="font-semibold">Target Mean (μ_target):</span> <span id="targetMeanDisplay">0.5000</span>
+                    </div>
+                    <div id="parameterDisplay">
+                        <span class="font-semibold">β:</span> <span id="betaValue">0.2618</span>
+                    </div>
+                </div>
+                <div class="mt-3 space-y-1">
+                    <div><span class="font-semibold text-blue-600">Original (v):</span> <span id="originalMean">0.0000</span></div>
+                    <div><span class="font-semibold text-green-600">Green Transform:</span> <span id="greenMean">0.0000</span></div>
+                    <div><span class="font-semibold text-red-600">Mean Converging (T):</span> <span id="redMean">0.0000</span></div>
+                    <div><span class="font-semibold text-orange-400">Direct Mean Converging:</span> <span id="orangeMean">0.0000</span></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Equations Display -->
+        <div class="bg-white rounded-lg shadow-lg p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-xl font-semibold">Equations</h2>
+                <div class="flex gap-4">
+                    <label class="inline-flex items-center">
+                        <input type="radio" name="equationFormat" value="latex" checked class="mr-2">
+                        <span class="text-sm">LaTeX format</span>
+                    </label>
+                    <label class="inline-flex items-center">
+                        <input type="radio" name="equationFormat" value="original" class="mr-2">
+                        <span class="text-sm">Original format</span>
+                    </label>
+                </div>
+            </div>
+            <div id="equationsDisplay" class="font-mono text-sm bg-gray-50 p-4 rounded">
+                <!-- Equations will be dynamically inserted here -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Base Transform Class
+        class Transform {
+            constructor(name, color) {
+                this.name = name;
+                this.color = color;
+            }
+            
+            clamp(value) {
+                return Math.max(0, Math.min(1, value));
+            }
+            
+            calculateMean(values) {
+                return values.reduce((sum, v) => sum + v, 0) / values.length;
+            }
+        }
+        
+        // Green Transform Classes
+        class PowerTransform extends Transform {
+            constructor() {
+                super('Power Transform', '#10B981');
+            }
+            
+            calculate(v, vMean, muTarget, compressionFactor) {
+                const betaRaw = 1 - compressionFactor * Math.abs(vMean - muTarget);
+                const beta = Math.max(0.01, betaRaw);
+                
+                if (muTarget > vMean) {
+                    return Math.pow(v, beta);
+                } else {
+                    return 1 - Math.pow(1 - v, beta);
+                }
+            }
+            
+            getBeta(vMean, muTarget, compressionFactor) {
+                const betaRaw = 1 - compressionFactor * Math.abs(vMean - muTarget);
+                return Math.max(0.01, betaRaw);
+            }
+            
+            getLatexEquation(vMean, muTarget, compressionFactor) {
+                return `
+                    <div class="font-semibold text-green-600">Green Transform: Power Transform</div>
+                    <div class="pl-4 border-l-2 border-green-400">
+                        β = max(0.01, 1 - c|v̄ - μ<sub>target</sub>|)<br/>
+                        <span class="text-xs text-gray-600">where c is the compression factor (0 ≤ c ≤ 2)</span><br/>
+                        T₁(v) = {<br/>
+                        <div class="pl-4">
+                            μ<sub>target</sub> > v̄ : v<sup>β</sup><br/>
+                            μ<sub>target</sub> ≤ v̄ : 1 - (1 - v)<sup>β</sup>
+                        </div>
+                        }
+                    </div>
+                `;
+            }
+            
+            getOriginalEquation(vMean, muTarget, compressionFactor) {
+                return `
+                    <div class="font-semibold text-green-600">Green Transform: Power Transform</div>
+                    <div class="pl-4 border-l-2 border-green-400">
+                        beta = MAX(0.01, 1 - compression_factor * ABS(v_mean - μ_target))<br/>
+                        <span class="text-xs text-gray-600">where compression_factor is between 0 and 2</span><br/>
+                        T₁(v) = IF(μ_target > v_mean,<br/>
+                        <span class="pl-12">POW(v, beta),</span><br/>
+                        <span class="pl-12">1 - POW(1 - v, beta)</span><br/>
+                        <span class="pl-8">)</span>
+                    </div>
+                `;
+            }
+        }
+        
+        class GeometricMeanTransform extends Transform {
+            constructor() {
+                super('Geometric Mean Transform', '#10B981');
+            }
+            
+            calculate(v, vArray, muTarget) {
+                const geoMean = this.calculateGeometricMean(vArray);
+                if (muTarget > 0.0001 && geoMean > 0.0001) {
+                    const power = Math.log(muTarget) / Math.log(geoMean);
+                    return Math.pow(Math.max(0.0001, v), power);
+                }
+                return v;
+            }
+            
+            calculateGeometricMean(values) {
+                return Math.exp(values.reduce((sum, v) => sum + Math.log(Math.max(0.0001, v)), 0) / values.length);
+            }
+            
+            getLatexEquation(vArray) {
+                return `
+                    <div class="font-semibold text-green-600">Green Transform: Geometric Mean Transform</div>
+                    <div class="pl-4 border-l-2 border-green-400">
+                        g = geometric_mean(v)<br/>
+                        T₁(v) = v<sup>log(μ<sub>target</sub>)/log(g)</sup>
+                    </div>
+                `;
+            }
+            
+            getOriginalEquation(vArray) {
+                return `
+                    <div class="font-semibold text-green-600">Green Transform: Geometric Mean Transform</div>
+                    <div class="pl-4 border-l-2 border-green-400">
+                        geo_mean = GEOMEAN(v_array)<br/>
+                        T₁(v) = POW(v, LOG(μ_target) / LOG(geo_mean))
+                    </div>
+                `;
+            }
+        }
+        
+        class MultiplicativeScaling extends Transform {
+            constructor() {
+                super('Multiplicative Scaling', '#10B981');
+            }
+            
+            calculate(v, vArray, muTarget) {
+                const geoMean = this.calculateGeometricMean(vArray);
+                if (geoMean > 0.0001) {
+                    const scaleFactor = muTarget / geoMean;
+                    if (scaleFactor < 1) {
+                        return Math.pow(v, 1 / scaleFactor);
+                    } else {
+                        return v * scaleFactor;
+                    }
+                }
+                return v;
+            }
+            
+            calculateGeometricMean(values) {
+                return Math.exp(values.reduce((sum, v) => sum + Math.log(Math.max(0.0001, v)), 0) / values.length);
+            }
+            
+            getLatexEquation(vArray) {
+                return `
+                    <div class="font-semibold text-green-600">Green Transform: Multiplicative Scaling</div>
+                    <div class="pl-4 border-l-2 border-green-400">
+                        g = geometric_mean(v)<br/>
+                        s = μ<sub>target</sub> / g<br/>
+                        T₁(v) = {<br/>
+                        <div class="pl-4">
+                            s < 1 : v<sup>1/s</sup><br/>
+                            s ≥ 1 : v × s
+                        </div>
+                        }
+                    </div>
+                `;
+            }
+            
+            getOriginalEquation(vArray) {
+                return `
+                    <div class="font-semibold text-green-600">Green Transform: Multiplicative Scaling</div>
+                    <div class="pl-4 border-l-2 border-green-400">
+                        geo_mean = GEOMEAN(v_array)<br/>
+                        scale_factor = μ_target / geo_mean<br/>
+                        T₁(v) = IF(scale_factor < 1,<br/>
+                        <span class="pl-12">POW(v, 1 / scale_factor),</span><br/>
+                        <span class="pl-12">v * scale_factor</span><br/>
+                        <span class="pl-8">)</span>
+                    </div>
+                `;
+            }
+        }
+        
+        // Mean Converging Transform Classes
+        class MeanConvergingTransform extends Transform {
+            constructor() {
+                super('Mean Converging Transform', '#EF4444');
+            }
+            
+            calculate(value, inputMean, muTarget) {
+                if (muTarget < inputMean) {
+                    return value * (muTarget / inputMean);
+                } else {
+                    return 1 - (1 - value) * ((1 - muTarget) / (1 - inputMean));
+                }
+            }
+            
+            getLatexEquation() {
+                return `
+                    <div class="font-semibold text-red-600 mt-6">Mean Converging Transform (Red Curve):</div>
+                    <div class="pl-4 border-l-2 border-red-400">
+                        Let m₁ = mean(T₁(v))<br/>
+                        T(v) = {<br/>
+                        <div class="pl-4">
+                            μ<sub>target</sub> < m₁ : T₁(v) × (μ<sub>target</sub> / m₁)<br/>
+                            μ<sub>target</sub> ≥ m₁ : 1 - (1 - T₁(v)) × ((1 - μ<sub>target</sub>) / (1 - m₁))
+                        </div>
+                        }
+                    </div>
+                `;
+            }
+            
+            getOriginalEquation() {
+                return `
+                    <div class="font-semibold text-red-600 mt-6">Mean Converging Transform (Red Curve):</div>
+                    <div class="pl-4 border-l-2 border-red-400">
+                        t1_mean = MEAN(T₁(v)) // Calculate mean of green transform<br/>
+                        T(v) = IF(μ_target < t1_mean,<br/>
+                        <span class="pl-11">T₁(v) * (μ_target / t1_mean),</span><br/>
+                        <span class="pl-11">1 - (1 - T₁(v)) * ((1 - μ_target) / (1 - t1_mean))</span><br/>
+                        <span class="pl-8">)</span>
+                    </div>
+                `;
+            }
+        }
+        
+        class DirectMeanConverging extends Transform {
+            constructor() {
+                super('Direct Mean Converging', '#FB923C');
+            }
+            
+            calculate(value, vMean, muTarget) {
+                if (muTarget < vMean) {
+                    return value * (muTarget / vMean);
+                } else {
+                    return 1 - (1 - value) * ((1 - muTarget) / (1 - vMean));
+                }
+            }
+            
+            getLatexEquation() {
+                return `
+                    <div class="font-semibold text-orange-500 mt-6">Direct Mean Converging (Orange Curve):</div>
+                    <div class="pl-4 border-l-2 border-orange-400">
+                        T<sub>direct</sub>(v) = {<br/>
+                        <div class="pl-4">
+                            μ<sub>target</sub> < v̄ : v × (μ<sub>target</sub> / v̄)<br/>
+                            μ<sub>target</sub> ≥ v̄ : 1 - (1 - v) × ((1 - μ<sub>target</sub>) / (1 - v̄))
+                        </div>
+                        }
+                    </div>
+                `;
+            }
+            
+            getOriginalEquation() {
+                return `
+                    <div class="font-semibold text-orange-500 mt-6">Direct Mean Converging (Orange Curve):</div>
+                    <div class="pl-4 border-l-2 border-orange-400">
+                        T_direct(v) = IF(μ_target < v_mean,<br/>
+                        <span class="pl-15">v * (μ_target / v_mean),</span><br/>
+                        <span class="pl-15">1 - (1 - v) * ((1 - μ_target) / (1 - v_mean))</span><br/>
+                        <span class="pl-11">)</span>
+                    </div>
+                `;
+            }
+        }
+        
+        // Main Application Class
+        class MeanTransformApp {
+            constructor() {
+                this.originalVArray = [
+                    0.41702200, 0.72032449, 0.00011437, 0.30233257, 0.14675589,
+                    0.09233859, 0.18626021, 0.34556073, 0.39676747, 0.53881673,
+                    0.41919451, 0.68521950, 0.20445225, 0.87811744, 0.02738759,
+                    0.67046751, 0.41730480, 0.55868983, 0.14038694, 0.19810149
+                ];
+                this.vArray = [...this.originalVArray];
+                this.muTarget = 0.5;
+                this.compressionFactor = 2;
+                this.smoothLines = true;
+                this.greenCurveMethod = 'power';
+                this.equationFormat = 'latex';
+                
+                // Initialize transform classes
+                this.greenTransforms = {
+                    'power': new PowerTransform(),
+                    'geometric': new GeometricMeanTransform(),
+                    'multiplicative': new MultiplicativeScaling()
+                };
+                this.meanConverging = new MeanConvergingTransform();
+                this.directMeanConverging = new DirectMeanConverging();
+                
+                // Initialize chart
+                this.initChart();
+                this.bindEvents();
+                this.update();
+            }
+            
+            initChart() {
+                const ctx = document.getElementById('transformChart').getContext('2d');
+                this.chart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: Array.from({length: 20}, (_, i) => i),
+                        datasets: [
+                            {
+                                label: 'Original (v)',
+                                data: [],
+                                borderColor: '#3B82F6',
+                                backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                                borderWidth: 2,
+                                tension: 0.4
+                            },
+                            {
+                                label: 'Green Transform',
+                                data: [],
+                                borderColor: '#10B981',
+                                backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                                borderWidth: 2,
+                                tension: 0.4
+                            },
+                            {
+                                label: 'Mean Converging (T)',
+                                data: [],
+                                borderColor: '#EF4444',
+                                backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                                borderWidth: 2,
+                                tension: 0.4
+                            },
+                            {
+                                label: 'Direct Mean Converging',
+                                data: [],
+                                borderColor: '#FB923C',
+                                backgroundColor: 'rgba(251, 146, 60, 0.1)',
+                                borderWidth: 2,
+                                tension: 0.4
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                max: 1,
+                                title: {
+                                    display: true,
+                                    text: 'Value'
+                                }
+                            },
+                            x: {
+                                title: {
+                                    display: true,
+                                    text: 'Index'
+                                }
+                            }
+                        },
+                        plugins: {
+                            legend: {
+                                position: 'top',
+                            }
+                        }
+                    }
+                });
+            }
+            
+            bindEvents() {
+                // Sliders
+                document.getElementById('muTargetSlider').addEventListener('input', (e) => {
+                    this.muTarget = parseFloat(e.target.value);
+                    document.getElementById('muTargetValue').textContent = this.muTarget.toFixed(3);
+                    this.update();
+                });
+                
+                document.getElementById('compressionFactorSlider').addEventListener('input', (e) => {
+                    this.compressionFactor = parseFloat(e.target.value);
+                    document.getElementById('compressionFactorValue').textContent = this.compressionFactor.toFixed(2);
+                    this.update();
+                });
+                
+                // Method selector
+                document.getElementById('greenCurveMethod').addEventListener('change', (e) => {
+                    this.greenCurveMethod = e.target.value;
+                    this.updateUIVisibility();
+                    this.update();
+                });
+                
+                // Smooth lines checkbox
+                document.getElementById('smoothLines').addEventListener('change', (e) => {
+                    this.smoothLines = e.target.checked;
+                    this.updateChartTension();
+                });
+                
+                // Buttons
+                document.getElementById('generateRandom').addEventListener('click', () => {
+                    this.vArray = Array(20).fill(0).map(() => Math.random());
+                    this.update();
+                });
+                
+                document.getElementById('restoreOriginal').addEventListener('click', () => {
+                    this.vArray = [...this.originalVArray];
+                    this.update();
+                });
+                
+                // Equation format radio
+                document.querySelectorAll('input[name="equationFormat"]').forEach(radio => {
+                    radio.addEventListener('change', (e) => {
+                        this.equationFormat = e.target.value;
+                        this.updateEquations();
+                    });
+                });
+            }
+            
+            updateUIVisibility() {
+                const compressionContainer = document.getElementById('compressionFactorContainer');
+                compressionContainer.style.display = this.greenCurveMethod === 'power' ? 'block' : 'none';
+            }
+            
+            updateChartTension() {
+                const tension = this.smoothLines ? 0.4 : 0;
+                this.chart.data.datasets.forEach(dataset => {
+                    dataset.tension = tension;
+                });
+                this.chart.update();
+            }
+            
+            calculateTransforms() {
+                const vMean = this.vArray.reduce((sum, v) => sum + v, 0) / this.vArray.length;
+                const greenTransform = this.greenTransforms[this.greenCurveMethod];
+                
+                // Calculate green transform values
+                const greenValues = this.vArray.map(v => {
+                    let value;
+                    if (this.greenCurveMethod === 'power') {
+                        value = greenTransform.calculate(v, vMean, this.muTarget, this.compressionFactor);
+                    } else {
+                        value = greenTransform.calculate(v, this.vArray, this.muTarget);
+                    }
+                    return greenTransform.clamp(value);
+                });
+                
+                // Calculate mean of green values
+                const greenMean = greenValues.reduce((sum, v) => sum + v, 0) / greenValues.length;
+                
+                // Calculate mean converging transform
+                const redValues = greenValues.map(v => {
+                    const value = this.meanConverging.calculate(v, greenMean, this.muTarget);
+                    return this.meanConverging.clamp(value);
+                });
+                
+                // Calculate direct mean converging
+                const orangeValues = this.vArray.map(v => {
+                    const value = this.directMeanConverging.calculate(v, vMean, this.muTarget);
+                    return this.directMeanConverging.clamp(value);
+                });
+                
+                return {
+                    original: this.vArray,
+                    green: greenValues,
+                    red: redValues,
+                    orange: orangeValues,
+                    means: {
+                        original: vMean,
+                        green: greenMean,
+                        red: redValues.reduce((sum, v) => sum + v, 0) / redValues.length,
+                        orange: orangeValues.reduce((sum, v) => sum + v, 0) / orangeValues.length
+                    }
+                };
+            }
+            
+            update() {
+                const transforms = this.calculateTransforms();
+                
+                // Update chart data
+                this.chart.data.datasets[0].data = transforms.original;
+                this.chart.data.datasets[1].data = transforms.green;
+                this.chart.data.datasets[2].data = transforms.red;
+                this.chart.data.datasets[3].data = transforms.orange;
+                this.chart.update();
+                
+                // Update statistics
+                document.getElementById('targetMeanDisplay').textContent = this.muTarget.toFixed(4);
+                document.getElementById('originalMean').textContent = transforms.means.original.toFixed(4);
+                document.getElementById('greenMean').textContent = transforms.means.green.toFixed(4);
+                document.getElementById('redMean').textContent = transforms.means.red.toFixed(4);
+                document.getElementById('orangeMean').textContent = transforms.means.orange.toFixed(4);
+                
+                // Update parameter display
+                const paramDisplay = document.getElementById('parameterDisplay');
+                if (this.greenCurveMethod === 'power') {
+                    const vMean = transforms.means.original;
+                    const beta = this.greenTransforms.power.getBeta(vMean, this.muTarget, this.compressionFactor);
+                    const betaRaw = 1 - this.compressionFactor * Math.abs(vMean - this.muTarget);
+                    paramDisplay.innerHTML = `<span class="font-semibold">β:</span> ${beta.toFixed(4)}${betaRaw < 0.01 ? ' <span class="text-purple-600 text-xs">(clamped)</span>' : ''}`;
+                } else {
+                    const geoMean = this.greenTransforms[this.greenCurveMethod].calculateGeometricMean(this.vArray);
+                    paramDisplay.innerHTML = `<span class="font-semibold">Geometric Mean:</span> ${geoMean.toFixed(4)}`;
+                }
+                
+                // Update equations
+                this.updateEquations();
+            }
+            
+            updateEquations() {
+                const container = document.getElementById('equationsDisplay');
+                const greenTransform = this.greenTransforms[this.greenCurveMethod];
+                const vMean = this.vArray.reduce((sum, v) => sum + v, 0) / this.vArray.length;
+                
+                let html = '';
+                
+                if (this.equationFormat === 'latex') {
+                    // Green transform equation
+                    if (this.greenCurveMethod === 'power') {
+                        html += greenTransform.getLatexEquation(vMean, this.muTarget, this.compressionFactor);
+                    } else {
+                        html += greenTransform.getLatexEquation(this.vArray);
+                    }
+                    
+                    // Mean converging equations
+                    html += this.meanConverging.getLatexEquation();
+                    html += this.directMeanConverging.getLatexEquation();
+                } else {
+                    // Green transform equation
+                    if (this.greenCurveMethod === 'power') {
+                        html += greenTransform.getOriginalEquation(vMean, this.muTarget, this.compressionFactor);
+                    } else {
+                        html += greenTransform.getOriginalEquation(this.vArray);
+                    }
+                    
+                    // Mean converging equations
+                    html += this.meanConverging.getOriginalEquation();
+                    html += this.directMeanConverging.getOriginalEquation();
+                }
+                
+                // Add notes
+                html += `
+                    <div class="mt-4 text-xs text-gray-600">
+                        Note: All values are clamped to [0, 1] after transformation<br/>
+                        ${this.greenCurveMethod === 'multiplicative' ? 'Multiplicative scaling preserves heterogeneity when scaling down' : ''}
+                    </div>
+                `;
+                
+                container.innerHTML = html;
+            }
+        }
+        
+        // Initialize the application when DOM is loaded
+        document.addEventListener('DOMContentLoaded', () => {
+            new MeanTransformApp();
+        });
+    </script>
+</body>
+</html>
