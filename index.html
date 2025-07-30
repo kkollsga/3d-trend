@@ -6,8 +6,8 @@
     <title>Mean Converging Transform Visualizer</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.4/katex.min.css">
-	<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.4/katex.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.4/katex.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.4/katex.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <style>
         /* Always reserve space for scrollbar to prevent layout shift */
@@ -33,6 +33,25 @@
         .if-body {
             margin-left: 40px;
             margin-top: 2px;
+        }
+        
+        /* Button styling for add child curve */
+        .add-child-curve-btn {
+			width: 24px;
+			height: 24px;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			border-radius: 4px;
+			transition: all 0.2s;
+		}
+
+		/* Curve wrapper styling */
+		.curve-wrapper {
+			margin-bottom: 8px;
+		}
+        .add-child-curve-btn:hover {
+            background-color: rgba(59, 130, 246, 0.1);
         }
     </style>
 </head>
@@ -69,18 +88,18 @@
             </div>
             
             <!-- Curves Manager -->
-            <div class="mb-6">
-                <h3 class="text-sm font-medium text-gray-700 mb-3">Curves Manager</h3>
-                <div class="text-sm text-gray-600 mb-2">
-                    Input data mean: <span id="inputDataMean" class="font-medium">0.0000</span>
-                </div>
-                <div id="curvesContainer" class="space-y-2">
-                    <!-- Curves will be dynamically rendered here -->
-                </div>
-                <button id="addCurveBtn" class="mt-3 text-gray-600 hover:text-blue-600 transition-colors text-sm">
-                    <i class="fas fa-plus mr-1"></i> Add curve
-                </button>
-            </div>
+			<div class="mb-6">
+				<h3 class="text-sm font-medium text-gray-700 mb-3">Curves Manager</h3>
+				<div class="text-sm text-gray-600 mb-2">
+					Input data mean: <span id="inputDataMean" class="font-medium">0.0000</span>
+				</div>
+				<div id="curvesContainer" class="space-y-2">
+					<!-- Curves will be dynamically rendered here -->
+				</div>
+				<button id="addCurveBtn" class="mt-3 text-gray-600 hover:text-blue-600 transition-colors text-sm">
+					<i class="fas fa-plus mr-1"></i> Add curve
+				</button>
+			</div>
             
             <!-- Options and Buttons -->
             <div class="flex items-center justify-between mb-6">
@@ -145,408 +164,408 @@
 
         // Equation Renderer Class
         class EquationRenderer {
-			renderLatex(structure, varName = 'v', inputColor = null, outputColor = null, parameters = {}) {
-				const v = inputColor ? `v_{${inputColor}}` : 'v';
-				const vbar = inputColor ? `\\bar{v}_{${inputColor}}` : '\\bar{v}';
-				const out = outputColor ? `v_{${outputColor}}` : 'T(v)';
-				
-				let html = '';
-				
-				// Render variables
-				if (structure.variables && structure.variables.length > 0) {
-					structure.variables.forEach(variable => {
-						const formula = this.substituteVariablesKatex(variable.formula, { v, vbar }, parameters);
-						const katexHtml = katex.renderToString(`${variable.name} = ${formula}`, { 
-							displayMode: false,
-							throwOnError: false 
-						});
-						html += `<div class="mb-1">${katexHtml}</div>`;
-					});
-				}
-				
-				// Render output
-				if (structure.output) {
-					if (structure.output.type === 'conditional') {
-						html += this.renderConditionalKatex(structure.output.cases, { v, vbar }, out, parameters);
-					} else {
-						const formula = this.substituteVariablesKatex(structure.output.formula, { v, vbar }, parameters);
-						const katexHtml = katex.renderToString(`${out} = ${formula}`, { 
-							displayMode: false,
-							throwOnError: false 
-						});
-						html += `<div>${katexHtml}</div>`;
-					}
-				}
-				
-				// Render notes (if we're not substituting parameters)
-				if (structure.notes && (!parameters || Object.keys(parameters).length === 0)) {
-					structure.notes.forEach(note => {
-						html += `<div class="text-xs text-gray-600 mt-1">${note}</div>`;
-					});
-				}
-				
-				return html;
-			}
-			
-			renderOriginal(structure, varName = 'v', inputColor = null, outputColor = null, parameters = {}) {
-				const v = this.formatVariable('v', inputColor, false);
-				const vbar = `${v}_mean`;
-				const out = outputColor ? `v_${outputColor}` : 'v_out';
-				
-				let html = '';
-				
-				// Render variables
-				if (structure.variables && structure.variables.length > 0) {
-					structure.variables.forEach(variable => {
-						const formula = this.substituteVariables(variable.formula, { v, vbar }, false, parameters);
-						html += `${variable.name} = ${formula}<br/>`;
-					});
-				}
-				
-				// Render output
-				if (structure.output) {
-					if (structure.output.type === 'conditional') {
-						const cases = structure.output.cases.map(c => {
-							const condition = this.substituteVariables(c.condition, { v, vbar }, false, parameters);
-							const formula = this.substituteVariables(c.formula, { v, vbar }, false, parameters);
-							return `${condition}, ${formula}`;
-						});
-						html += `${out} = IF(${cases[0]}, ${cases[1].split(', ')[1]})`;
-					} else {
-						const formula = this.substituteVariables(structure.output.formula, { v, vbar }, false, parameters);
-						html += `${out} = ${formula}`;
-					}
-				}
-				
-				// Render notes (only if no parameters are substituted)
-				if (structure.notes && (!parameters || Object.keys(parameters).length === 0)) {
-					structure.notes.forEach(note => {
-						html += `<br/><span class="text-xs text-gray-600">${note}</span>`;
-					});
-				}
-				
-				return html;
-			}
-			
-			renderConditionalKatex(cases, vars, out, parameters) {
-				const outputColor = out.match(/v_\{([^}]+)\}/)?.[1];
-				const bgColor = outputColor && COLOR_SCHEME[outputColor] ? COLOR_SCHEME[outputColor].bg : '#f0f0f0';
-				const borderColor = outputColor && COLOR_SCHEME[outputColor] ? COLOR_SCHEME[outputColor].line : '#666';
-				
-				// Render the output variable
-				const outHtml = katex.renderToString(`${out} = `, { 
-					displayMode: false,
-					throwOnError: false 
-				});
-				
-				let html = `<div>${outHtml}`;
-				html += `<div class="if-wrapper" style="border-color: ${borderColor}40;">`;
-				
-				cases.forEach((caseItem, index) => {
-					const condition = this.substituteVariablesKatex(caseItem.condition, vars, parameters);
-					const formula = this.substituteVariablesKatex(caseItem.formula, vars, parameters);
-					
-					if (index === 0) {
-						// First case - render "If" + condition
-						const conditionHtml = katex.renderToString(condition, { 
-							displayMode: false,
-							throwOnError: false 
-						});
-						html += `<div class="if-condition" style="background-color: ${bgColor}20;">If ${conditionHtml}</div>`;
-					} else {
-						// Else case - just render "else" as plain text
-						html += `<div class="if-condition" style="background-color: ${bgColor}20;">else</div>`;
-					}
-					
-					// Render formula
-					const formulaHtml = katex.renderToString(formula, { 
-						displayMode: false,
-						throwOnError: false 
-					});
-					html += `<div class="if-body">${formulaHtml}</div>`;
-				});
-				
-				html += '</div></div>';
-				return html;
-			}
-			
-			substituteVariablesKatex(formula, vars, parameters = {}) {
-				let result = formula;
-				
-				// Replace variables
-				result = result.replace(/\{v\}/g, vars.v);
-				result = result.replace(/\{vbar\}/g, vars.vbar);
-				
-				// Handle parameter substitution
-				if (parameters) {
-					if (parameters.wv !== undefined) {
-						if (parameters.wv === 1) {
-							result = result.replace(/\{v\}\^w_v/g, '{v}');
-							result = result.replace(/v\^w_v/g, 'v');
-							result = result.replace(/w_v/g, '1');
-						} else {
-							result = result.replace(/\^w_v/g, `^{${parameters.wv}}`);
-							result = result.replace(/w_v/g, parameters.wv);
-						}
-					}
-					
-					if (parameters.wmu !== undefined) {
-						if (parameters.wmu === 1) {
-							result = result.replace(/μ_target\^w_μ/g, '\\mu_{target}');
-							result = result.replace(/w_μ/g, '1');
-						} else {
-							result = result.replace(/μ_target\^w_μ/g, `{\\mu_{target}}^{${parameters.wmu}}`);
-							result = result.replace(/\^w_μ/g, `^{${parameters.wmu}}`);
-							result = result.replace(/w_μ/g, parameters.wmu);
-						}
-					}
-					
-					if (parameters.c !== undefined) {
-						result = result.replace(/\bc\b/g, parameters.c);
-					}
-				}
-				
-				// Convert to LaTeX notation
-				result = result.replace(/μ_target/g, '\\mu_{target}');
-				result = result.replace(/×/g, '\\times');
-				result = result.replace(/geometric_mean/g, '\\text{geometric\\_mean}');
-				result = result.replace(/log/g, '\\log');
-				result = result.replace(/max/g, '\\max');
-				
-				// Convert fractions using a logical approach
-				result = this.convertToLatexFractions(result);
-				
-				// Ensure any numeric exponents are wrapped in braces if they aren't already
-				result = result.replace(/\^([\d.]+)(?![}])/g, '^{$1}');
-				
-				// Handle exponents that are fractions (that weren't already converted)
-				result = result.replace(/\^\(([^/]+)\/([^)]+)\)/g, '^{\\frac{$1}{$2}}');
-				
-				// Handle remaining w_v and w_μ that weren't replaced
-				result = result.replace(/w_v/g, 'w_v');
-				result = result.replace(/w_μ/g, 'w_\\mu');
-				
-				return result;
-			}
+            renderLatex(structure, varName = 'v', inputColor = null, outputColor = null, parameters = {}) {
+                const v = inputColor ? `v_{${inputColor}}` : 'v';
+                const vbar = inputColor ? `\\bar{v}_{${inputColor}}` : '\\bar{v}';
+                const out = outputColor ? `v_{${outputColor}}` : 'T(v)';
+                
+                let html = '';
+                
+                // Render variables
+                if (structure.variables && structure.variables.length > 0) {
+                    structure.variables.forEach(variable => {
+                        const formula = this.substituteVariablesKatex(variable.formula, { v, vbar }, parameters);
+                        const katexHtml = katex.renderToString(`${variable.name} = ${formula}`, { 
+                            displayMode: false,
+                            throwOnError: false 
+                        });
+                        html += `<div class="mb-1">${katexHtml}</div>`;
+                    });
+                }
+                
+                // Render output
+                if (structure.output) {
+                    if (structure.output.type === 'conditional') {
+                        html += this.renderConditionalKatex(structure.output.cases, { v, vbar }, out, parameters);
+                    } else {
+                        const formula = this.substituteVariablesKatex(structure.output.formula, { v, vbar }, parameters);
+                        const katexHtml = katex.renderToString(`${out} = ${formula}`, { 
+                            displayMode: false,
+                            throwOnError: false 
+                        });
+                        html += `<div>${katexHtml}</div>`;
+                    }
+                }
+                
+                // Render notes (if we're not substituting parameters)
+                if (structure.notes && (!parameters || Object.keys(parameters).length === 0)) {
+                    structure.notes.forEach(note => {
+                        html += `<div class="text-xs text-gray-600 mt-1">${note}</div>`;
+                    });
+                }
+                
+                return html;
+            }
+            
+            renderOriginal(structure, varName = 'v', inputColor = null, outputColor = null, parameters = {}) {
+                const v = this.formatVariable('v', inputColor, false);
+                const vbar = `${v}_mean`;
+                const out = outputColor ? `v_${outputColor}` : 'v_out';
+                
+                let html = '';
+                
+                // Render variables
+                if (structure.variables && structure.variables.length > 0) {
+                    structure.variables.forEach(variable => {
+                        const formula = this.substituteVariables(variable.formula, { v, vbar }, false, parameters);
+                        html += `${variable.name} = ${formula}<br/>`;
+                    });
+                }
+                
+                // Render output
+                if (structure.output) {
+                    if (structure.output.type === 'conditional') {
+                        const cases = structure.output.cases.map(c => {
+                            const condition = this.substituteVariables(c.condition, { v, vbar }, false, parameters);
+                            const formula = this.substituteVariables(c.formula, { v, vbar }, false, parameters);
+                            return `${condition}, ${formula}`;
+                        });
+                        html += `${out} = IF(${cases[0]}, ${cases[1].split(', ')[1]})`;
+                    } else {
+                        const formula = this.substituteVariables(structure.output.formula, { v, vbar }, false, parameters);
+                        html += `${out} = ${formula}`;
+                    }
+                }
+                
+                // Render notes (only if no parameters are substituted)
+                if (structure.notes && (!parameters || Object.keys(parameters).length === 0)) {
+                    structure.notes.forEach(note => {
+                        html += `<br/><span class="text-xs text-gray-600">${note}</span>`;
+                    });
+                }
+                
+                return html;
+            }
+            
+            renderConditionalKatex(cases, vars, out, parameters) {
+                const outputColor = out.match(/v_\{([^}]+)\}/)?.[1];
+                const bgColor = outputColor && COLOR_SCHEME[outputColor] ? COLOR_SCHEME[outputColor].bg : '#f0f0f0';
+                const borderColor = outputColor && COLOR_SCHEME[outputColor] ? COLOR_SCHEME[outputColor].line : '#666';
+                
+                // Render the output variable
+                const outHtml = katex.renderToString(`${out} = `, { 
+                    displayMode: false,
+                    throwOnError: false 
+                });
+                
+                let html = `<div>${outHtml}`;
+                html += `<div class="if-wrapper" style="border-color: ${borderColor}40;">`;
+                
+                cases.forEach((caseItem, index) => {
+                    const condition = this.substituteVariablesKatex(caseItem.condition, vars, parameters);
+                    const formula = this.substituteVariablesKatex(caseItem.formula, vars, parameters);
+                    
+                    if (index === 0) {
+                        // First case - render "If" + condition
+                        const conditionHtml = katex.renderToString(condition, { 
+                            displayMode: false,
+                            throwOnError: false 
+                        });
+                        html += `<div class="if-condition" style="background-color: ${bgColor}20;">If ${conditionHtml}</div>`;
+                    } else {
+                        // Else case - just render "else" as plain text
+                        html += `<div class="if-condition" style="background-color: ${bgColor}20;">else</div>`;
+                    }
+                    
+                    // Render formula
+                    const formulaHtml = katex.renderToString(formula, { 
+                        displayMode: false,
+                        throwOnError: false 
+                    });
+                    html += `<div class="if-body">${formulaHtml}</div>`;
+                });
+                
+                html += '</div></div>';
+                return html;
+            }
+            
+            substituteVariablesKatex(formula, vars, parameters = {}) {
+                let result = formula;
+                
+                // Replace variables
+                result = result.replace(/\{v\}/g, vars.v);
+                result = result.replace(/\{vbar\}/g, vars.vbar);
+                
+                // Handle parameter substitution
+                if (parameters) {
+                    if (parameters.wv !== undefined) {
+                        if (parameters.wv === 1) {
+                            result = result.replace(/\{v\}\^w_v/g, '{v}');
+                            result = result.replace(/v\^w_v/g, 'v');
+                            result = result.replace(/w_v/g, '1');
+                        } else {
+                            result = result.replace(/\^w_v/g, `^{${parameters.wv}}`);
+                            result = result.replace(/w_v/g, parameters.wv);
+                        }
+                    }
+                    
+                    if (parameters.wmu !== undefined) {
+                        if (parameters.wmu === 1) {
+                            result = result.replace(/μ_target\^w_μ/g, '\\mu_{target}');
+                            result = result.replace(/w_μ/g, '1');
+                        } else {
+                            result = result.replace(/μ_target\^w_μ/g, `{\\mu_{target}}^{${parameters.wmu}}`);
+                            result = result.replace(/\^w_μ/g, `^{${parameters.wmu}}`);
+                            result = result.replace(/w_μ/g, parameters.wmu);
+                        }
+                    }
+                    
+                    if (parameters.c !== undefined) {
+                        result = result.replace(/\bc\b/g, parameters.c);
+                    }
+                }
+                
+                // Convert to LaTeX notation
+                result = result.replace(/μ_target/g, '\\mu_{target}');
+                result = result.replace(/×/g, '\\times');
+                result = result.replace(/geometric_mean/g, '\\text{geometric\\_mean}');
+                result = result.replace(/log/g, '\\log');
+                result = result.replace(/max/g, '\\max');
+                
+                // Convert fractions using a logical approach
+                result = this.convertToLatexFractions(result);
+                
+                // Ensure any numeric exponents are wrapped in braces if they aren't already
+                result = result.replace(/\^([\d.]+)(?![}])/g, '^{$1}');
+                
+                // Handle exponents that are fractions (that weren't already converted)
+                result = result.replace(/\^\(([^/]+)\/([^)]+)\)/g, '^{\\frac{$1}{$2}}');
+                
+                // Handle remaining w_v and w_μ that weren't replaced
+                result = result.replace(/w_v/g, 'w_v');
+                result = result.replace(/w_μ/g, 'w_\\mu');
+                
+                return result;
+            }
 
-			convertToLatexFractions(expr) {
-				let result = '';
-				let i = 0;
-				
-				while (i < expr.length) {
-					// Look for opening parenthesis that might start a fraction
-					if (expr[i] === '(' && this.isFractionStart(expr, i)) {
-						// Extract the entire fraction expression
-						let fractionResult = this.extractAndConvertFraction(expr, i);
-						result += fractionResult.latex;
-						i = fractionResult.endIndex;
-					} else {
-						result += expr[i];
-						i++;
-					}
-				}
-				
-				return result;
-			}
+            convertToLatexFractions(expr) {
+                let result = '';
+                let i = 0;
+                
+                while (i < expr.length) {
+                    // Look for opening parenthesis that might start a fraction
+                    if (expr[i] === '(' && this.isFractionStart(expr, i)) {
+                        // Extract the entire fraction expression
+                        let fractionResult = this.extractAndConvertFraction(expr, i);
+                        result += fractionResult.latex;
+                        i = fractionResult.endIndex;
+                    } else {
+                        result += expr[i];
+                        i++;
+                    }
+                }
+                
+                return result;
+            }
 
-			isFractionStart(expr, startIndex) {
-				// Quick check if this parenthesis contains a division
-				let parenCount = 1;
-				let i = startIndex + 1;
-				
-				while (i < expr.length && parenCount > 0) {
-					if (expr[i] === '(') parenCount++;
-					if (expr[i] === ')') parenCount--;
-					if (expr[i] === '/' && parenCount === 1) {
-						return true; // Found a division at the top level
-					}
-					i++;
-				}
-				
-				return false;
-			}
+            isFractionStart(expr, startIndex) {
+                // Quick check if this parenthesis contains a division
+                let parenCount = 1;
+                let i = startIndex + 1;
+                
+                while (i < expr.length && parenCount > 0) {
+                    if (expr[i] === '(') parenCount++;
+                    if (expr[i] === ')') parenCount--;
+                    if (expr[i] === '/' && parenCount === 1) {
+                        return true; // Found a division at the top level
+                    }
+                    i++;
+                }
+                
+                return false;
+            }
 
-			extractAndConvertFraction(expr, startIndex) {
-				let i = startIndex + 1; // Skip the opening (
-				let parenCount = 1;
-				let divisionIndex = -1;
-				let numerator = '';
-				let denominator = '';
-				
-				// Find the division operator at the correct nesting level
-				while (i < expr.length && parenCount > 0) {
-					if (expr[i] === '(') parenCount++;
-					if (expr[i] === ')') parenCount--;
-					
-					if (expr[i] === '/' && parenCount === 1 && divisionIndex === -1) {
-						divisionIndex = i;
-						numerator = expr.substring(startIndex + 1, i).trim();
-						let j = i + 1;
-						let denomStart = j;
-						let denomParenCount = 0;
-						
-						// Extract denominator
-						while (j < expr.length && (denomParenCount > 0 || (parenCount > 1 || expr[j] !== ')'))) {
-							if (expr[j] === '(') denomParenCount++;
-							if (expr[j] === ')') denomParenCount--;
-							j++;
-						}
-						
-						denominator = expr.substring(denomStart, j).trim();
-						i = j;
-					} else {
-						i++;
-					}
-				}
-				
-				if (divisionIndex !== -1) {
-					// Remove outer parentheses from numerator and denominator if present
-					if (numerator.startsWith('(') && numerator.endsWith(')')) {
-						numerator = numerator.slice(1, -1);
-					}
-					if (denominator.startsWith('(') && denominator.endsWith(')')) {
-						denominator = denominator.slice(1, -1);
-					}
-					
-					return {
-						latex: `\\frac{${numerator}}{${denominator}}`,
-						endIndex: i
-					};
-				}
-				
-				// Not a fraction, return as-is
-				return {
-					latex: expr.substring(startIndex, i),
-					endIndex: i
-				};
-			}
-			
-			formatVariable(baseVar, color, isLatex) {
-				if (!color) return baseVar;
-				return isLatex ? `${baseVar}<sub>${color}</sub>` : `${baseVar}_${color}`;
-			}
-			
-			substituteVariables(formula, vars, isLatex, parameters = {}) {
-				let result = formula;
-				
-				// Replace variables
-				result = result.replace(/\{v\}/g, vars.v);
-				result = result.replace(/\{vbar\}/g, vars.vbar);
-				
-				if (!isLatex) {
-					// Handle parameter substitution for original format
-					if (parameters) {
-						if (parameters.wv !== undefined) {
-							result = result.replace(/w_v/g, parameters.wv);
-						}
-						if (parameters.wmu !== undefined) {
-							result = result.replace(/w_μ/g, parameters.wmu);
-						}
-						if (parameters.c !== undefined) {
-							result = result.replace(/\bc\b/g, parameters.c);
-						}
-					}
-					
-					// Convert power notation to pow() - use a simple function to process the string
-					result = this.convertToPowNotation(result);
-				}
-				
-				return result;
-			}
+            extractAndConvertFraction(expr, startIndex) {
+                let i = startIndex + 1; // Skip the opening (
+                let parenCount = 1;
+                let divisionIndex = -1;
+                let numerator = '';
+                let denominator = '';
+                
+                // Find the division operator at the correct nesting level
+                while (i < expr.length && parenCount > 0) {
+                    if (expr[i] === '(') parenCount++;
+                    if (expr[i] === ')') parenCount--;
+                    
+                    if (expr[i] === '/' && parenCount === 1 && divisionIndex === -1) {
+                        divisionIndex = i;
+                        numerator = expr.substring(startIndex + 1, i).trim();
+                        let j = i + 1;
+                        let denomStart = j;
+                        let denomParenCount = 0;
+                        
+                        // Extract denominator
+                        while (j < expr.length && (denomParenCount > 0 || (parenCount > 1 || expr[j] !== ')'))) {
+                            if (expr[j] === '(') denomParenCount++;
+                            if (expr[j] === ')') denomParenCount--;
+                            j++;
+                        }
+                        
+                        denominator = expr.substring(denomStart, j).trim();
+                        i = j;
+                    } else {
+                        i++;
+                    }
+                }
+                
+                if (divisionIndex !== -1) {
+                    // Remove outer parentheses from numerator and denominator if present
+                    if (numerator.startsWith('(') && numerator.endsWith(')')) {
+                        numerator = numerator.slice(1, -1);
+                    }
+                    if (denominator.startsWith('(') && denominator.endsWith(')')) {
+                        denominator = denominator.slice(1, -1);
+                    }
+                    
+                    return {
+                        latex: `\\frac{${numerator}}{${denominator}}`,
+                        endIndex: i
+                    };
+                }
+                
+                // Not a fraction, return as-is
+                return {
+                    latex: expr.substring(startIndex, i),
+                    endIndex: i
+                };
+            }
+            
+            formatVariable(baseVar, color, isLatex) {
+                if (!color) return baseVar;
+                return isLatex ? `${baseVar}<sub>${color}</sub>` : `${baseVar}_${color}`;
+            }
+            
+            substituteVariables(formula, vars, isLatex, parameters = {}) {
+                let result = formula;
+                
+                // Replace variables
+                result = result.replace(/\{v\}/g, vars.v);
+                result = result.replace(/\{vbar\}/g, vars.vbar);
+                
+                if (!isLatex) {
+                    // Handle parameter substitution for original format
+                    if (parameters) {
+                        if (parameters.wv !== undefined) {
+                            result = result.replace(/w_v/g, parameters.wv);
+                        }
+                        if (parameters.wmu !== undefined) {
+                            result = result.replace(/w_μ/g, parameters.wmu);
+                        }
+                        if (parameters.c !== undefined) {
+                            result = result.replace(/\bc\b/g, parameters.c);
+                        }
+                    }
+                    
+                    // Convert power notation to pow() - use a simple function to process the string
+                    result = this.convertToPowNotation(result);
+                }
+                
+                return result;
+            }
 
-			convertToPowNotation(expr) {
-				// Process the expression character by character
-				let result = '';
-				let i = 0;
-				
-				while (i < expr.length) {
-					// Look for ^ character
-					if (expr[i] === '^') {
-						// Find what comes before ^
-						let base = '';
-						let j = result.length - 1;
-						
-						// If the base is in parentheses
-						if (result[j] === ')') {
-							let parenCount = 1;
-							j--;
-							while (j >= 0 && parenCount > 0) {
-								if (result[j] === ')') parenCount++;
-								if (result[j] === '(') parenCount--;
-								j--;
-							}
-							base = result.substring(j + 1);
-							result = result.substring(0, j + 1);
-						} else {
-							// Base is a simple variable/number
-							while (j >= 0 && /[a-zA-Zμ0-9_.]/.test(result[j])) {
-								j--;
-							}
-							base = result.substring(j + 1);
-							result = result.substring(0, j + 1);
-						}
-						
-						// Find what comes after ^
-						i++; // Skip the ^
-						let exponent = '';
-						
-						// If exponent is in parentheses
-						if (i < expr.length && expr[i] === '(') {
-							let parenCount = 1;
-							i++;
-							let start = i;
-							while (i < expr.length && parenCount > 0) {
-								if (expr[i] === '(') parenCount++;
-								if (expr[i] === ')') parenCount--;
-								i++;
-							}
-							exponent = expr.substring(start, i - 1);
-						} else {
-							// Exponent is a simple value
-							let start = i;
-							while (i < expr.length && /[a-zA-Zμ0-9_.]/.test(expr[i])) {
-								i++;
-							}
-							exponent = expr.substring(start, i);
-						}
-						
-						// Build pow() expression
-						result += `pow(${base}, ${exponent})`;
-					} else {
-						// Regular character, just copy it
-						result += expr[i];
-						i++;
-					}
-				}
-				
-				return result;
-			}
-			
-			renderDisplayInfo(displayInfo) {
-				if (!displayInfo) return '';
-				
-				let html = '';
-				
-				if (displayInfo.primary) {
-					const p = displayInfo.primary;
-					html = `(${p.label}: ${p.value.toFixed(p.precision)})`;
-				}
-				
-				if (displayInfo.extra) {
-					if (displayInfo.extra.html) {
-						html = `(${displayInfo.extra.html})`;
-					} else if (displayInfo.extra.template) {
-						let extra = displayInfo.extra.template;
-						Object.entries(displayInfo.extra.values).forEach(([key, val]) => {
-							extra = extra.replace(`{${key}}`, val.value.toFixed(val.precision));
-						});
-						html = `(${extra})`;
-					}
-				}
-				
-				return html;
-			}
-		}
+            convertToPowNotation(expr) {
+                // Process the expression character by character
+                let result = '';
+                let i = 0;
+                
+                while (i < expr.length) {
+                    // Look for ^ character
+                    if (expr[i] === '^') {
+                        // Find what comes before ^
+                        let base = '';
+                        let j = result.length - 1;
+                        
+                        // If the base is in parentheses
+                        if (result[j] === ')') {
+                            let parenCount = 1;
+                            j--;
+                            while (j >= 0 && parenCount > 0) {
+                                if (result[j] === ')') parenCount++;
+                                if (result[j] === '(') parenCount--;
+                                j--;
+                            }
+                            base = result.substring(j + 1);
+                            result = result.substring(0, j + 1);
+                        } else {
+                            // Base is a simple variable/number
+                            while (j >= 0 && /[a-zA-Zμ0-9_.]/.test(result[j])) {
+                                j--;
+                            }
+                            base = result.substring(j + 1);
+                            result = result.substring(0, j + 1);
+                        }
+                        
+                        // Find what comes after ^
+                        i++; // Skip the ^
+                        let exponent = '';
+                        
+                        // If exponent is in parentheses
+                        if (i < expr.length && expr[i] === '(') {
+                            let parenCount = 1;
+                            i++;
+                            let start = i;
+                            while (i < expr.length && parenCount > 0) {
+                                if (expr[i] === '(') parenCount++;
+                                if (expr[i] === ')') parenCount--;
+                                i++;
+                            }
+                            exponent = expr.substring(start, i - 1);
+                        } else {
+                            // Exponent is a simple value
+                            let start = i;
+                            while (i < expr.length && /[a-zA-Zμ0-9_.]/.test(expr[i])) {
+                                i++;
+                            }
+                            exponent = expr.substring(start, i);
+                        }
+                        
+                        // Build pow() expression
+                        result += `pow(${base}, ${exponent})`;
+                    } else {
+                        // Regular character, just copy it
+                        result += expr[i];
+                        i++;
+                    }
+                }
+                
+                return result;
+            }
+            
+            renderDisplayInfo(displayInfo) {
+                if (!displayInfo) return '';
+                
+                let html = '';
+                
+                if (displayInfo.primary) {
+                    const p = displayInfo.primary;
+                    html = `(${p.label}: ${p.value.toFixed(p.precision)})`;
+                }
+                
+                if (displayInfo.extra) {
+                    if (displayInfo.extra.html) {
+                        html = `(${displayInfo.extra.html})`;
+                    } else if (displayInfo.extra.template) {
+                        let extra = displayInfo.extra.template;
+                        Object.entries(displayInfo.extra.values).forEach(([key, val]) => {
+                            extra = extra.replace(`{${key}}`, val.value.toFixed(val.precision));
+                        });
+                        html = `(${extra})`;
+                    }
+                }
+                
+                return html;
+            }
+        }
 
         // Base Transform Class
         class Transform {
@@ -603,383 +622,383 @@
 
         // Transform Implementations
         class AdaptivePowerTransform extends Transform {
-			constructor() {
-				super('power', 'Adaptive Power Transform');
-			}
-			
-			calculate(valuesArray, inputMean, targetMean, parameters = {}) {
-				const compressionFactor = parameters.compressionFactor || 2;
-				const betaRaw = 1 - compressionFactor * Math.abs(inputMean - targetMean);
-				const beta = Math.max(0.01, betaRaw);
-				
-				return valuesArray.map(v => {
-					if (targetMean > inputMean) {
-						return Math.pow(v, beta);
-					} else {
-						return 1 - Math.pow(1 - v, beta);
-					}
-				});
-			}
-			
-			getParameterDefinitions() {
-				return [{
-					name: 'compressionFactor',
-					label: 'Compression Factor',
-					type: 'slider',
-					min: 0,
-					max: 2,
-					step: 0.01,
-					default: 2,
-					displayPrecision: 2
-				}];
-			}
-			
-			getDisplayInfo(valuesArray, inputMean, targetMean, parameters) {
-				const compressionFactor = parameters.compressionFactor || 2;
-				const betaRaw = 1 - compressionFactor * Math.abs(inputMean - targetMean);
-				const beta = Math.max(0.01, betaRaw);
-				return {
-					primary: { label: 'β', value: beta, precision: 3 }
-				};
-			}
-			
-			getEquationStructure() {
-				return {
-					variables: [
-						{ name: 'β', formula: 'max(0.01, 1 - c|{vbar} - μ_target|)' }
-					],
-					output: {
-						type: 'conditional',
-						cases: [
-							{ condition: 'μ_target > {vbar}', formula: '{v}^β' },
-							{ condition: 'else', formula: '1 - (1 - {v})^β' }
-						]
-					}
-				};
-			}
-		}
+            constructor() {
+                super('power', 'Adaptive Power Transform');
+            }
+            
+            calculate(valuesArray, inputMean, targetMean, parameters = {}) {
+                const compressionFactor = parameters.compressionFactor || 2;
+                const betaRaw = 1 - compressionFactor * Math.abs(inputMean - targetMean);
+                const beta = Math.max(0.01, betaRaw);
+                
+                return valuesArray.map(v => {
+                    if (targetMean > inputMean) {
+                        return Math.pow(v, beta);
+                    } else {
+                        return 1 - Math.pow(1 - v, beta);
+                    }
+                });
+            }
+            
+            getParameterDefinitions() {
+                return [{
+                    name: 'compressionFactor',
+                    label: 'Compression Factor',
+                    type: 'slider',
+                    min: 0,
+                    max: 2,
+                    step: 0.01,
+                    default: 2,
+                    displayPrecision: 2
+                }];
+            }
+            
+            getDisplayInfo(valuesArray, inputMean, targetMean, parameters) {
+                const compressionFactor = parameters.compressionFactor || 2;
+                const betaRaw = 1 - compressionFactor * Math.abs(inputMean - targetMean);
+                const beta = Math.max(0.01, betaRaw);
+                return {
+                    primary: { label: 'β', value: beta, precision: 3 }
+                };
+            }
+            
+            getEquationStructure() {
+                return {
+                    variables: [
+                        { name: 'β', formula: 'max(0.01, 1 - c|{vbar} - μ_target|)' }
+                    ],
+                    output: {
+                        type: 'conditional',
+                        cases: [
+                            { condition: 'μ_target > {vbar}', formula: '{v}^β' },
+                            { condition: 'else', formula: '1 - (1 - {v})^β' }
+                        ]
+                    }
+                };
+            }
+        }
 
         class LogLinearTransform extends Transform {
-			constructor() {
-				super('geometric', 'Log-Linear Transform');
-			}
-			
-			calculate(valuesArray, inputMean, targetMean, parameters = {}) {
-				const geoMean = this.calculateGeometricMean(valuesArray);
-				if (targetMean > 0 && geoMean > 0) {
-					const power = Math.log(targetMean) / Math.log(geoMean);
-					return valuesArray.map(v => v > 0 ? Math.pow(v, power) : 0);
-				}
-				return valuesArray;
-			}
-			
-			getDisplayInfo(valuesArray) {
-				const geoMean = this.calculateGeometricMean(valuesArray);
-				return {
-					primary: { label: 'Geometric Mean', value: geoMean, precision: 3 }
-				};
-			}
-			
-			getEquationStructure() {
-				return {
-					variables: [
-						{ name: 'g', formula: 'geometric_mean({v})' }
-					],
-					output: {
-						formula: '{v}^(log(μ_target) / log(g))'
-					}
-				};
-			}
-		}
+            constructor() {
+                super('geometric', 'Log-Linear Transform');
+            }
+            
+            calculate(valuesArray, inputMean, targetMean, parameters = {}) {
+                const geoMean = this.calculateGeometricMean(valuesArray);
+                if (targetMean > 0 && geoMean > 0) {
+                    const power = Math.log(targetMean) / Math.log(geoMean);
+                    return valuesArray.map(v => v > 0 ? Math.pow(v, power) : 0);
+                }
+                return valuesArray;
+            }
+            
+            getDisplayInfo(valuesArray) {
+                const geoMean = this.calculateGeometricMean(valuesArray);
+                return {
+                    primary: { label: 'Geometric Mean', value: geoMean, precision: 3 }
+                };
+            }
+            
+            getEquationStructure() {
+                return {
+                    variables: [
+                        { name: 'g', formula: 'geometric_mean({v})' }
+                    ],
+                    output: {
+                        formula: '{v}^(log(μ_target) / log(g))'
+                    }
+                };
+            }
+        }
 
         class ScaleFactorTransform extends Transform {
-			constructor() {
-				super('multiplicative', 'Scale Factor Transform');
-			}
-			
-			canProduceOutOfRangeValues() {
-				return true;
-			}
-			
-			calculate(valuesArray, inputMean, targetMean, parameters = {}) {
-				if (inputMean > 0) {
-					const scaleFactor = targetMean / inputMean;
-					return valuesArray.map(v => {
-						if (scaleFactor < 1) {
-							return Math.pow(v, 1 / scaleFactor);
-						} else {
-							return v * scaleFactor;
-						}
-					});
-				}
-				return valuesArray;
-			}
-			
-			getDisplayInfo(valuesArray, inputMean, targetMean) {
-				const scaleFactor = targetMean / inputMean;
-				return {
-					primary: { label: 'Scale Factor', value: scaleFactor, precision: 3 }
-				};
-			}
-			
-			getEquationStructure() {
-				return {
-					variables: [
-						{ name: 's', formula: 'μ_target / {vbar}' }
-					],
-					output: {
-						type: 'conditional',
-						cases: [
-							{ condition: 'μ_target < {vbar}', formula: '{v}^(1/s)' },
-							{ condition: 'else', formula: '{v} × s' }
-						]
-					}
-				};
-			}
-		}
+            constructor() {
+                super('multiplicative', 'Scale Factor Transform');
+            }
+            
+            canProduceOutOfRangeValues() {
+                return true;
+            }
+            
+            calculate(valuesArray, inputMean, targetMean, parameters = {}) {
+                if (inputMean > 0) {
+                    const scaleFactor = targetMean / inputMean;
+                    return valuesArray.map(v => {
+                        if (scaleFactor < 1) {
+                            return Math.pow(v, 1 / scaleFactor);
+                        } else {
+                            return v * scaleFactor;
+                        }
+                    });
+                }
+                return valuesArray;
+            }
+            
+            getDisplayInfo(valuesArray, inputMean, targetMean) {
+                const scaleFactor = targetMean / inputMean;
+                return {
+                    primary: { label: 'Scale Factor', value: scaleFactor, precision: 3 }
+                };
+            }
+            
+            getEquationStructure() {
+                return {
+                    variables: [
+                        { name: 's', formula: 'μ_target / {vbar}' }
+                    ],
+                    output: {
+                        type: 'conditional',
+                        cases: [
+                            { condition: 'μ_target < {vbar}', formula: '{v}^(1/s)' },
+                            { condition: 'else', formula: '{v} × s' }
+                        ]
+                    }
+                };
+            }
+        }
 
         class LinearMeanMatching extends Transform {
-			constructor() {
-				super('meanConverging', 'Linear Mean Matching');
-			}
-			
-			calculate(valuesArray, inputMean, targetMean, parameters = {}) {
-				return valuesArray.map(v => {
-					// Handle edge cases
-					if (inputMean === targetMean) {
-						return v; // No transformation needed
-					}
-					
-					if (targetMean === 1 && inputMean < 1) {
-						// Special case: all values should become 1
-						return 1;
-					}
-					
-					if (targetMean === 0 && inputMean > 0) {
-						// Special case: all values should become 0
-						return 0;
-					}
-					
-					// Normal cases
-					if (targetMean < inputMean) {
-						return v * (targetMean / inputMean);
-					} else {
-						// Check for division by zero
-						if (inputMean === 1) {
-							return v; // Can't scale up from mean of 1
-						}
-						return 1 - (1 - v) * ((1 - targetMean) / (1 - inputMean));
-					}
-				});
-			}
-			
-			getEquationStructure() {
-				return {
-					output: {
-						type: 'conditional',
-						cases: [
-							{ 
-								condition: 'μ_target < {vbar}', 
-								formula: '{v} × (μ_target / {vbar})' 
-							},
-							{ 
-								condition: 'else', 
-								formula: '1 - (1 - {v}) × ((1 - μ_target) / (1 - {vbar}))' 
-							}
-						]
-					}
-				};
-			}
-		}
+            constructor() {
+                super('meanConverging', 'Linear Mean Matching');
+            }
+            
+            calculate(valuesArray, inputMean, targetMean, parameters = {}) {
+                return valuesArray.map(v => {
+                    // Handle edge cases
+                    if (inputMean === targetMean) {
+                        return v; // No transformation needed
+                    }
+                    
+                    if (targetMean === 1 && inputMean < 1) {
+                        // Special case: all values should become 1
+                        return 1;
+                    }
+                    
+                    if (targetMean === 0 && inputMean > 0) {
+                        // Special case: all values should become 0
+                        return 0;
+                    }
+                    
+                    // Normal cases
+                    if (targetMean < inputMean) {
+                        return v * (targetMean / inputMean);
+                    } else {
+                        // Check for division by zero
+                        if (inputMean === 1) {
+                            return v; // Can't scale up from mean of 1
+                        }
+                        return 1 - (1 - v) * ((1 - targetMean) / (1 - inputMean));
+                    }
+                });
+            }
+            
+            getEquationStructure() {
+                return {
+                    output: {
+                        type: 'conditional',
+                        cases: [
+                            { 
+                                condition: 'μ_target < {vbar}', 
+                                formula: '{v} × (μ_target / {vbar})' 
+                            },
+                            { 
+                                condition: 'else', 
+                                formula: '1 - (1 - {v}) × ((1 - μ_target) / (1 - {vbar}))' 
+                            }
+                        ]
+                    }
+                };
+            }
+        }
 
         class WeightedGeometricBlend extends Transform {
-			constructor() {
-				super('geometricAverage', 'Weighted Geometric Blend');
-			}
-			
-			canProduceOutOfRangeValues() {
-				return true;
-			}
-			
-			calculate(valuesArray, inputMean, targetMean, parameters = {}) {
-				const vWeighting = parameters.vWeighting || 0;
-				
-				let vWeight, targetWeight;
-				if (vWeighting >= 0) {
-					vWeight = 1 + vWeighting;
-					targetWeight = 1;
-				} else {
-					vWeight = 1;
-					targetWeight = 1 - vWeighting;
-				}
-				
-				const totalWeight = vWeight + targetWeight;
-				
-				return valuesArray.map(v => {
-					return Math.pow(Math.pow(v, vWeight) * Math.pow(targetMean, targetWeight), 1 / totalWeight);
-				});
-			}
-			
-			getParameterDefinitions() {
-				return [{
-					name: 'vWeighting',
-					label: 'V Weighting',
-					type: 'slider',
-					min: -5,
-					max: 5,
-					step: 0.1,
-					default: 0,
-					displayPrecision: 1
-				}];
-			}
-			
-			getDisplayInfo(valuesArray, inputMean, targetMean, parameters) {
-				const vWeighting = parameters.vWeighting || 0;
-				let vWeight, targetWeight;
-				if (vWeighting >= 0) {
-					vWeight = 1 + vWeighting;
-					targetWeight = 1;
-				} else {
-					vWeight = 1;
-					targetWeight = 1 - vWeighting;
-				}
-				return {
-					extra: {
-						template: 'Weights v: {vWeight} μ: {muWeight}',
-						values: {
-							vWeight: { value: vWeight, precision: 1 },
-							muWeight: { value: targetWeight, precision: 1 }
-						}
-					}
-				};
-			}
-			
-			getEquationStructure() {
-				return {
-					output: {
-						formula: '({v}^w_v × μ_target^w_μ)^(1/(w_v + w_μ))'
-					}
-				};
-			}
-		}
-		
-		class LogSpaceBlend extends Transform {
-			constructor() {
-				super('logSpaceBlend', 'Log-Space Blend');
-			}
-			
-			canProduceOutOfRangeValues() {
-				return true;
-			}
-			
-			calculate(valuesArray, inputMean, targetMean, parameters = {}) {
-				const beta = parameters.beta || 0.5;
-				const shift = parameters.shift || 0;
-				
-				// Calculate the actual mean of input values
-				const vMean = valuesArray.reduce((sum, v) => sum + v, 0) / valuesArray.length;
-				
-				// Work in log space for better handling of multiplicative relationships
-				return valuesArray.map(v => {
-					if (v <= 0) return targetMean; // Handle non-positive values
-					
-					// Blend in log space
-					const logV = Math.log(v);
-					const logVMean = Math.log(vMean);
-					const logTargetMean = Math.log(targetMean);
-					
-					// Preserve heterogeneity in log space while shifting toward target
-					const logResult = logTargetMean + beta * (logV - logVMean) + shift;
-					
-					return Math.exp(logResult);
-				});
-			}
-			
-			getParameterDefinitions() {
-				return [
-					{
-						name: 'beta',
-						label: 'Heterogeneity Preservation (β)',
-						type: 'slider',
-						min: 0,
-						max: 2,
-						step: 0.05,
-						default: 0.5,
-						displayPrecision: 2,
-						description: '0 = flat (no variation), 1 = full variation, >1 = amplified'
-					},
-					{
-						name: 'shift',
-						label: 'Log Shift',
-						type: 'slider',
-						min: -1,
-						max: 1,
-						step: 0.05,
-						default: 0,
-						displayPrecision: 2,
-						description: 'Additional shift in log space'
-					}
-				];
-			}
-			
-			getDisplayInfo(valuesArray, inputMean, targetMean, parameters) {
-				const beta = parameters.beta || 0.5;
-				const shift = parameters.shift || 0;
-				
-				return {
-					extra: {
-						template: 'β: {beta}, shift: {shift}',
-						values: {
-							beta: { value: beta, precision: 2 },
-							shift: { value: shift, precision: 2 }
-						}
-					}
-				};
-			}
-			
-			getEquationStructure() {
-				return {
-					output: {
-						formula: 'exp(ln(μ_target) + β(ln(v) - ln(v̄)) + shift)'
-					}
-				};
-			}
-		}
+            constructor() {
+                super('geometricAverage', 'Weighted Geometric Blend');
+            }
+            
+            canProduceOutOfRangeValues() {
+                return true;
+            }
+            
+            calculate(valuesArray, inputMean, targetMean, parameters = {}) {
+                const vWeighting = parameters.vWeighting || 0;
+                
+                let vWeight, targetWeight;
+                if (vWeighting >= 0) {
+                    vWeight = 1 + vWeighting;
+                    targetWeight = 1;
+                } else {
+                    vWeight = 1;
+                    targetWeight = 1 - vWeighting;
+                }
+                
+                const totalWeight = vWeight + targetWeight;
+                
+                return valuesArray.map(v => {
+                    return Math.pow(Math.pow(v, vWeight) * Math.pow(targetMean, targetWeight), 1 / totalWeight);
+                });
+            }
+            
+            getParameterDefinitions() {
+                return [{
+                    name: 'vWeighting',
+                    label: 'V Weighting',
+                    type: 'slider',
+                    min: -5,
+                    max: 5,
+                    step: 0.1,
+                    default: 0,
+                    displayPrecision: 1
+                }];
+            }
+            
+            getDisplayInfo(valuesArray, inputMean, targetMean, parameters) {
+                const vWeighting = parameters.vWeighting || 0;
+                let vWeight, targetWeight;
+                if (vWeighting >= 0) {
+                    vWeight = 1 + vWeighting;
+                    targetWeight = 1;
+                } else {
+                    vWeight = 1;
+                    targetWeight = 1 - vWeighting;
+                }
+                return {
+                    extra: {
+                        template: 'Weights v: {vWeight} μ: {muWeight}',
+                        values: {
+                            vWeight: { value: vWeight, precision: 1 },
+                            muWeight: { value: targetWeight, precision: 1 }
+                        }
+                    }
+                };
+            }
+            
+            getEquationStructure() {
+                return {
+                    output: {
+                        formula: '({v}^w_v × μ_target^w_μ)^(1/(w_v + w_μ))'
+                    }
+                };
+            }
+        }
+        
+        class LogSpaceBlend extends Transform {
+            constructor() {
+                super('logSpaceBlend', 'Log-Space Blend');
+            }
+            
+            canProduceOutOfRangeValues() {
+                return true;
+            }
+            
+            calculate(valuesArray, inputMean, targetMean, parameters = {}) {
+                const beta = parameters.beta || 0.5;
+                const shift = parameters.shift || 0;
+                
+                // Calculate the actual mean of input values
+                const vMean = valuesArray.reduce((sum, v) => sum + v, 0) / valuesArray.length;
+                
+                // Work in log space for better handling of multiplicative relationships
+                return valuesArray.map(v => {
+                    if (v <= 0) return targetMean; // Handle non-positive values
+                    
+                    // Blend in log space
+                    const logV = Math.log(v);
+                    const logVMean = Math.log(vMean);
+                    const logTargetMean = Math.log(targetMean);
+                    
+                    // Preserve heterogeneity in log space while shifting toward target
+                    const logResult = logTargetMean + beta * (logV - logVMean) + shift;
+                    
+                    return Math.exp(logResult);
+                });
+            }
+            
+            getParameterDefinitions() {
+                return [
+                    {
+                        name: 'beta',
+                        label: 'Heterogeneity Preservation (β)',
+                        type: 'slider',
+                        min: 0,
+                        max: 2,
+                        step: 0.05,
+                        default: 0.5,
+                        displayPrecision: 2,
+                        description: '0 = flat (no variation), 1 = full variation, >1 = amplified'
+                    },
+                    {
+                        name: 'shift',
+                        label: 'Log Shift',
+                        type: 'slider',
+                        min: -1,
+                        max: 1,
+                        step: 0.05,
+                        default: 0,
+                        displayPrecision: 2,
+                        description: 'Additional shift in log space'
+                    }
+                ];
+            }
+            
+            getDisplayInfo(valuesArray, inputMean, targetMean, parameters) {
+                const beta = parameters.beta || 0.5;
+                const shift = parameters.shift || 0;
+                
+                return {
+                    extra: {
+                        template: 'β: {beta}, shift: {shift}',
+                        values: {
+                            beta: { value: beta, precision: 2 },
+                            shift: { value: shift, precision: 2 }
+                        }
+                    }
+                };
+            }
+            
+            getEquationStructure() {
+                return {
+                    output: {
+                        formula: 'exp(ln(μ_target) + β(ln(v) - ln(v̄)) + shift)'
+                    }
+                };
+            }
+        }
 
 
         // Transform Registry
         const TRANSFORM_REGISTRY = {
-			'power': {
-				displayName: 'Adaptive Power Transform',
-				class: AdaptivePowerTransform,
-				defaultParameters: { compressionFactor: 2 }
-			},
-			'geometric': {
-				displayName: 'Log-Linear Transform',
-				class: LogLinearTransform,
-				defaultParameters: {}
-			},
-			'multiplicative': {
-				displayName: 'Scale Factor Transform',
-				class: ScaleFactorTransform,
-				defaultParameters: {}
-			},
-			'meanConverging': {
-				displayName: 'Linear Mean Matching',
-				class: LinearMeanMatching,
-				defaultParameters: {}
-			},
-			'geometricAverage': {
-				displayName: 'Weighted Geometric Blend',
-				class: WeightedGeometricBlend,
-				defaultParameters: { vWeighting: 0 }
-			},
-			'logSpaceBlend': {
-				displayName: 'Log-Space Blend',
-				class: LogSpaceBlend,
-				defaultParameters: { beta: 0.5, shift: 0 }
-			}
-		};
+            'power': {
+                displayName: 'Adaptive Power Transform',
+                class: AdaptivePowerTransform,
+                defaultParameters: { compressionFactor: 2 }
+            },
+            'geometric': {
+                displayName: 'Log-Linear Transform',
+                class: LogLinearTransform,
+                defaultParameters: {}
+            },
+            'multiplicative': {
+                displayName: 'Scale Factor Transform',
+                class: ScaleFactorTransform,
+                defaultParameters: {}
+            },
+            'meanConverging': {
+                displayName: 'Linear Mean Matching',
+                class: LinearMeanMatching,
+                defaultParameters: {}
+            },
+            'geometricAverage': {
+                displayName: 'Weighted Geometric Blend',
+                class: WeightedGeometricBlend,
+                defaultParameters: { vWeighting: 0 }
+            },
+            'logSpaceBlend': {
+                displayName: 'Log-Space Blend',
+                class: LogSpaceBlend,
+                defaultParameters: { beta: 0.5, shift: 0 }
+            }
+        };
 
         // Main Application Class
         class MeanTransformApp {
@@ -995,7 +1014,7 @@
                 this.smoothLines = true;
                 this.equationFormat = 'latex';
                 this.chartHeightTall = false;
-                this.hiddenDatasets = new Set();
+                this.hiddenDatasets = new Set(); // Track by curve ID instead of label
                 this.equationRenderer = new EquationRenderer();
                 
                 // Initialize curves
@@ -1166,20 +1185,32 @@
             }
             
             renderCurves() {
-                const html = this.curves.map(curve => this.renderCurve(curve)).join('');
-                this.dom.curvesContainer.innerHTML = html;
-                this.bindCurveEvents();
-            }
+				// Build hierarchical structure
+				const rootCurves = this.curves.filter(c => !c.parentId);
+				const renderCurveHierarchy = (parentId = null, level = 0) => {
+					const curves = parentId ? 
+						this.curves.filter(c => c.parentId === parentId) : 
+						rootCurves;
+					
+					return curves.map(curve => {
+						const childrenHtml = renderCurveHierarchy(curve.id, level + 1);
+						return this.renderCurve(curve, level) + childrenHtml;
+					}).join('');
+				};
+				
+				const html = renderCurveHierarchy();
+				this.dom.curvesContainer.innerHTML = html;
+				this.bindCurveEvents();
+			}
             
             shouldShowClippingOption(curve, result) {
                 // Show if already clipped or if there are values outside [0,1]
                 return curve.isClipped || (result && result.hasClipping);
             }
             
-            renderCurve(curve) {
-				const indentLevel = this.getIndentationLevel(curve);
-				const indentClass = `ml-${indentLevel * 8}`;
+            renderCurve(curve, indentLevel = 0) {
 				const bgColor = COLOR_SCHEME[curve.color].bg;
+				const lineColor = COLOR_SCHEME[curve.color].line;
 				const registryEntry = TRANSFORM_REGISTRY[curve.method];
 				const paramDefs = registryEntry ? new registryEntry.class().getParameterDefinitions() : [];
 				
@@ -1210,81 +1241,89 @@
 						statsDisplay += '</span>';
 					}
 				}
-                
-                let parametersHtml = '';
-                if (paramDefs.length > 0) {
-                    parametersHtml = '<div class="mt-2 space-y-1">';
-                    paramDefs.forEach(param => {
-                        const value = curve.parameters[param.name] || param.default;
-                        parametersHtml += `
-                            <div class="flex items-center gap-2">
-                                <span class="text-xs text-gray-600">${param.label}:</span>
-                                <input type="range" 
-                                       data-curve-id="${curve.id}" 
-                                       data-param="${param.name}"
-                                       min="${param.min}" 
-                                       max="${param.max}" 
-                                       step="${param.step}" 
-                                       value="${value}"
-                                       class="curve-param-slider flex-1 h-1 bg-gray-300 rounded appearance-none cursor-pointer">
-                                <span class="text-xs font-medium w-12 text-right param-value-${curve.id}-${param.name}">${value.toFixed(param.displayPrecision || 2)}</span>
-                            </div>
-                        `;
-                    });
-                    parametersHtml += '</div>';
-                }
-                
-                return `
-                    <div class="relative" style="margin-left: ${indentLevel * 32}px;">
-                        <div class="p-3 rounded" style="background-color: ${bgColor};">
-                            <div class="flex items-start justify-between">
-                                <div class="flex-1">
-                                    <div class="flex items-center">
-                                        <select data-curve-id="${curve.id}" data-field="color" 
-                                                class="curve-color-select appearance-none bg-transparent text-gray-800 text-sm cursor-pointer focus:outline-none capitalize">
-                                            ${Object.keys(COLOR_SCHEME).map(color => 
-                                                `<option value="${color}" ${curve.color === color ? 'selected' : ''}>${color.charAt(0).toUpperCase() + color.slice(1)}</option>`
-                                            ).join('')}
-                                        </select>
-                                        <select data-curve-id="${curve.id}" data-field="method" 
-                                                class="curve-method-select appearance-none bg-transparent text-gray-800 font-bold text-sm cursor-pointer focus:outline-none ml-3">
-                                            ${Object.entries(TRANSFORM_REGISTRY).map(([key, config]) => 
-                                                `<option value="${key}" ${curve.method === key ? 'selected' : ''}>${config.displayName}</option>`
-                                            ).join('')}
-                                        </select>
-                                        ${!registryEntry ? '<span class="text-red-600 text-xs ml-2">⚠ Invalid method!</span>' : ''}
-                                        ${statsDisplay}
-                                    </div>
-                                    ${parametersHtml}
-                                    ${this.shouldShowClippingOption(curve, result) ? `
-                                        <div class="mt-2">
-                                            <label class="inline-flex items-center text-xs">
-                                                <input type="checkbox" data-curve-id="${curve.id}" 
-                                                       class="curve-clip-checkbox mr-1 h-3 w-3 text-blue-600 border-gray-300 rounded"
-                                                       ${curve.isClipped ? 'checked' : ''}>
-                                                <span class="text-gray-600">Clip to [0,1]</span>
-                                            </label>
-                                        </div>
-                                    ` : ''}
-                                </div>
-                                <div class="relative ml-2">
-                                    <button data-curve-id="${curve.id}" class="delete-curve-btn text-gray-600 hover:text-red-600 transition-colors">
-                                        <i class="fas fa-trash text-sm"></i>
-                                    </button>
-                                    <div id="confirm-${curve.id}" class="hidden absolute right-0 top-6 bg-white shadow-lg rounded p-2 text-xs whitespace-nowrap z-10">
-                                        <span class="text-gray-700">Delete this curve?</span>
-                                        <button data-curve-id="${curve.id}" class="confirm-delete-btn text-red-600 ml-2">Yes</button>
-                                        <button data-curve-id="${curve.id}" class="cancel-delete-btn text-gray-600 ml-1">No</button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        <button data-parent-id="${curve.id}" class="add-child-curve-btn absolute -right-6 top-3 text-gray-600 hover:text-blue-600 transition-colors">
-                            <i class="fas fa-plus text-sm"></i>
-                        </button>
-                    </div>
-                `;
-            }
+				
+				let parametersHtml = '';
+				if (paramDefs.length > 0) {
+					parametersHtml = '<div class="mt-2 space-y-1">';
+					paramDefs.forEach(param => {
+						const value = curve.parameters[param.name] || param.default;
+						parametersHtml += `
+							<div class="flex items-center gap-2">
+								<span class="text-xs text-gray-600">${param.label}:</span>
+								<input type="range" 
+									   data-curve-id="${curve.id}" 
+									   data-param="${param.name}"
+									   min="${param.min}" 
+									   max="${param.max}" 
+									   step="${param.step}" 
+									   value="${value}"
+									   class="curve-param-slider flex-1 h-1 bg-gray-300 rounded appearance-none cursor-pointer">
+								<span class="text-xs font-medium w-12 text-right param-value-${curve.id}-${param.name}">${value.toFixed(param.displayPrecision || 2)}</span>
+							</div>
+						`;
+					});
+					parametersHtml += '</div>';
+				}
+				
+				return `
+					<div class="curve-wrapper flex items-stretch gap-2" style="margin-left: ${indentLevel * 32}px;">
+						<div class="flex-1 relative">
+							<div class="p-3 rounded" style="background-color: ${bgColor};">
+								<div class="flex items-start justify-between">
+									<div class="flex-1">
+										<div class="flex items-center">
+											<select data-curve-id="${curve.id}" data-field="color" 
+													class="curve-color-select appearance-none bg-transparent text-gray-800 text-sm cursor-pointer focus:outline-none capitalize">
+												${Object.keys(COLOR_SCHEME).map(color => 
+													`<option value="${color}" ${curve.color === color ? 'selected' : ''}>${color.charAt(0).toUpperCase() + color.slice(1)}</option>`
+												).join('')}
+											</select>
+											<select data-curve-id="${curve.id}" data-field="method" 
+													class="curve-method-select appearance-none bg-transparent text-gray-800 font-bold text-sm cursor-pointer focus:outline-none ml-3">
+												${Object.entries(TRANSFORM_REGISTRY).map(([key, config]) => 
+													`<option value="${key}" ${curve.method === key ? 'selected' : ''}>${config.displayName}</option>`
+												).join('')}
+											</select>
+											${!registryEntry ? '<span class="text-red-600 text-xs ml-2">⚠ Invalid method!</span>' : ''}
+											${statsDisplay}
+										</div>
+										${parametersHtml}
+										${this.shouldShowClippingOption(curve, result) ? `
+											<div class="mt-2">
+												<label class="inline-flex items-center text-xs">
+													<input type="checkbox" data-curve-id="${curve.id}" 
+														   class="curve-clip-checkbox mr-1 h-3 w-3 text-blue-600 border-gray-300 rounded"
+														   ${curve.isClipped ? 'checked' : ''}>
+													<span class="text-gray-600">Clip to [0,1]</span>
+												</label>
+											</div>
+										` : ''}
+									</div>
+									<div class="relative ml-2">
+										<button data-curve-id="${curve.id}" class="delete-curve-btn text-gray-600 hover:text-red-600 transition-colors">
+											<i class="fas fa-trash text-sm"></i>
+										</button>
+										<div id="confirm-${curve.id}" class="hidden absolute right-0 top-6 bg-white shadow-lg rounded p-2 text-xs whitespace-nowrap z-10">
+											<span class="text-gray-700">Delete this curve?</span>
+											<button data-curve-id="${curve.id}" class="confirm-delete-btn text-red-600 ml-2">Yes</button>
+											<button data-curve-id="${curve.id}" class="cancel-delete-btn text-gray-600 ml-1">No</button>
+										</div>
+									</div>
+								</div>
+							</div>
+						</div>
+						<div class="flex items-center">
+							<button data-parent-id="${curve.id}" 
+									class="add-child-curve-btn text-gray-600 transition-all z-10" 
+									style="background-color: transparent;"
+									onmouseover="this.style.backgroundColor='${bgColor}40'"
+									onmouseout="this.style.backgroundColor='transparent'">
+								<i class="fas fa-plus text-sm"></i>
+							</button>
+						</div>
+					</div>
+				`;
+			}
             
             bindCurveEvents() {
                 // Color selectors
@@ -1362,7 +1401,10 @@
                 // Add child curve buttons
                 document.querySelectorAll('.add-child-curve-btn').forEach(btn => {
                     btn.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
                         const parentId = e.currentTarget.dataset.parentId;
+                        console.log('Adding child curve with parentId:', parentId); // Debug log
                         this.addCurve(parentId);
                     });
                 });
@@ -1407,11 +1449,15 @@
                                     const meta = legend.chart.getDatasetMeta(index);
                                     meta.hidden = !meta.hidden;
                                     
-                                    // Track hidden state
+                                    // Get the dataset to find the curve ID
+                                    const dataset = legend.chart.data.datasets[index];
+                                    const curveId = dataset.curveId;
+                                    
+                                    // Track hidden state by curve ID
                                     if (meta.hidden) {
-                                        this.hiddenDatasets.add(legendItem.text);
+                                        this.hiddenDatasets.add(curveId);
                                     } else {
-                                        this.hiddenDatasets.delete(legendItem.text);
+                                        this.hiddenDatasets.delete(curveId);
                                     }
                                     
                                     legend.chart.update();
@@ -1477,59 +1523,59 @@
             }
             
             calculateTransforms() {
-				const results = {
-					original: this.vArray,
-					curves: {}
-				};
-				
-				const vMean = this.vArray.reduce((sum, v) => sum + v, 0) / this.vArray.length;
-				
-				// Process curves in order
-				this.curves.sort((a, b) => a.order - b.order).forEach(curve => {
-					// Get input values FIRST (before checking registry)
-					let inputValues;
-					let inputMean;
-					
-					if (curve.parentId) {
-						// Use parent curve output
-						const parentResult = results.curves[curve.parentId];
-						if (parentResult) {
-							inputValues = parentResult.clipped;
-							inputMean = parentResult.actualMean;
-						} else {
-							// Fallback to original if parent not found
-							inputValues = this.vArray;
-							inputMean = vMean;
-						}
-					} else {
-						// Use original values
-						inputValues = this.vArray;
-						inputMean = vMean;
-					}
-					
-					// NOW check if the transform exists
-					const registryEntry = TRANSFORM_REGISTRY[curve.method];
-					if (!registryEntry) {
-						// Store error state for this curve
-						results.curves[curve.id] = {
-							error: `Transform method "${curve.method}" not found`,
-							raw: inputValues,
-							clipped: inputValues,
-							mean: inputMean,
-							actualMean: inputMean,
-							hasClipping: false,
-							transform: null,
-							inputMean: inputMean
-						};
-						return; // Skip to next curve
-					}
-					
-					const transformClass = registryEntry.class;
-					const transform = new transformClass();
-					
-					// Calculate transform
-					const rawValues = transform.calculate(inputValues, inputMean, this.muTarget, curve.parameters);
-					const clippedValues = rawValues.map(v => transform.clamp(v));
+                const results = {
+                    original: this.vArray,
+                    curves: {}
+                };
+                
+                const vMean = this.vArray.reduce((sum, v) => sum + v, 0) / this.vArray.length;
+                
+                // Process curves in order
+                this.curves.sort((a, b) => a.order - b.order).forEach(curve => {
+                    // Get input values FIRST (before checking registry)
+                    let inputValues;
+                    let inputMean;
+                    
+                    if (curve.parentId) {
+                        // Use parent curve output
+                        const parentResult = results.curves[curve.parentId];
+                        if (parentResult) {
+                            inputValues = parentResult.clipped;
+                            inputMean = parentResult.actualMean;
+                        } else {
+                            // Fallback to original if parent not found
+                            inputValues = this.vArray;
+                            inputMean = vMean;
+                        }
+                    } else {
+                        // Use original values
+                        inputValues = this.vArray;
+                        inputMean = vMean;
+                    }
+                    
+                    // NOW check if the transform exists
+                    const registryEntry = TRANSFORM_REGISTRY[curve.method];
+                    if (!registryEntry) {
+                        // Store error state for this curve
+                        results.curves[curve.id] = {
+                            error: `Transform method "${curve.method}" not found`,
+                            raw: inputValues,
+                            clipped: inputValues,
+                            mean: inputMean,
+                            actualMean: inputMean,
+                            hasClipping: false,
+                            transform: null,
+                            inputMean: inputMean
+                        };
+                        return; // Skip to next curve
+                    }
+                    
+                    const transformClass = registryEntry.class;
+                    const transform = new transformClass();
+                    
+                    // Calculate transform
+                    const rawValues = transform.calculate(inputValues, inputMean, this.muTarget, curve.parameters);
+                    const clippedValues = rawValues.map(v => transform.clamp(v));
                     
                     // Calculate mean based on what will actually be used
                     const actualValues = curve.isClipped ? clippedValues : rawValues;
@@ -1554,86 +1600,102 @@
                 return results;
             }
             
+            getCurveLabel(curve) {
+                const registryEntry = TRANSFORM_REGISTRY[curve.method];
+                const baseName = registryEntry ? registryEntry.displayName : `Unknown (${curve.method})`;
+                
+                // Add parent color indicator for nested curves
+                if (curve.parentId) {
+                    const parentCurve = this.curves.find(c => c.id === curve.parentId);
+                    if (parentCurve) {
+                        return `${baseName} (${parentCurve.color})`;
+                    }
+                }
+                
+                return baseName;
+            }
+            
             update() {
-				const transforms = this.calculateTransforms();
-				
-				// Update input data mean display
-				this.dom.inputDataMean.textContent = transforms.originalMean.toFixed(4);
-				
-				// Calculate y-axis range based on actual data points only
-				let minValue = 0;
-				let maxValue = 1;
-				
-				// Check original values
-				minValue = Math.min(minValue, ...this.vArray);
-				maxValue = Math.max(maxValue, ...this.vArray);
-				
-				// Check all curve values for range
-				this.curves.forEach(curve => {
-					const result = transforms.curves[curve.id];
-					if (result) {
-						const values = curve.isClipped ? result.clipped : result.raw;
-						minValue = Math.min(minValue, ...values);
-						maxValue = Math.max(maxValue, ...values);
-					}
-				});
-				
-				// Add padding
-				const range = maxValue - minValue;
-				minValue = Math.max(0, minValue - range * 0.1);
+                const transforms = this.calculateTransforms();
+                
+                // Update input data mean display
+                this.dom.inputDataMean.textContent = transforms.originalMean.toFixed(4);
+                
+                // Calculate y-axis range based on actual data points only
+                let minValue = 0;
+                let maxValue = 1;
+                
+                // Check original values
+                minValue = Math.min(minValue, ...this.vArray);
+                maxValue = Math.max(maxValue, ...this.vArray);
+                
+                // Check all curve values for range
+                this.curves.forEach(curve => {
+                    const result = transforms.curves[curve.id];
+                    if (result) {
+                        const values = curve.isClipped ? result.clipped : result.raw;
+                        minValue = Math.min(minValue, ...values);
+                        maxValue = Math.max(maxValue, ...values);
+                    }
+                });
+                
+                // Add padding
+                const range = maxValue - minValue;
+                minValue = Math.max(0, minValue - range * 0.1);
 
-				// Only add padding to maxValue if it's not already at the natural boundary of 1
-				if (maxValue < 1) {
-					maxValue = Math.min(1, maxValue + range * 0.1);
-				} else if (maxValue > 1) {
-					maxValue = maxValue + range * 0.1;
-				}
-				
-				// Update chart scale
-				this.chart.options.scales.y.min = minValue;
-				this.chart.options.scales.y.max = maxValue;
-				
-				// DECLARE datasets array FIRST
-				const datasets = [
-					{
-						label: 'Original (v)',
-						data: this.vArray,
-						borderColor: '#6B7280', // Dark grey
-						backgroundColor: 'rgba(107, 114, 128, 0.1)',
-						borderWidth: 2,
-						tension: this.smoothLines ? 0.4 : 0,
-						hidden: this.hiddenDatasets.has('Original (v)')
-					}
-				];
-				
-				// THEN add curve datasets
-				this.curves.forEach(curve => {
-					const result = transforms.curves[curve.id];
-					if (result) {
-						const values = curve.isClipped ? result.clipped : result.raw;
-						const registryEntry = TRANSFORM_REGISTRY[curve.method];
-						const label = registryEntry ? registryEntry.displayName : `Unknown (${curve.method})`;
-						datasets.push({
-							label: label,
-							data: values,
-							borderColor: COLOR_SCHEME[curve.color].line,
-							backgroundColor: COLOR_SCHEME[curve.color].bg + '40',
-							borderWidth: 2,
-							tension: this.smoothLines ? 0.4 : 0,
-							hidden: this.hiddenDatasets.has(label)
-						});
-					}
-				});
-				
-				this.chart.data.datasets = datasets;
-				this.chart.update('none');
-				
-				// Re-render curves to update statistics
-				this.renderCurves();
-				
-				// Update equations
-				this.updateEquations();
-			}
+                // Only add padding to maxValue if it's not already at the natural boundary of 1
+                if (maxValue < 1) {
+                    maxValue = Math.min(1, maxValue + range * 0.1);
+                } else if (maxValue > 1) {
+                    maxValue = maxValue + range * 0.1;
+                }
+                
+                // Update chart scale
+                this.chart.options.scales.y.min = minValue;
+                this.chart.options.scales.y.max = maxValue;
+                
+                // DECLARE datasets array FIRST
+                const datasets = [
+                    {
+                        label: 'Original (v)',
+                        data: this.vArray,
+                        borderColor: '#6B7280', // Dark grey
+                        backgroundColor: 'rgba(107, 114, 128, 0.1)',
+                        borderWidth: 2,
+                        tension: this.smoothLines ? 0.4 : 0,
+                        curveId: 'original', // Add curve ID for tracking
+                        hidden: this.hiddenDatasets.has('original')
+                    }
+                ];
+                
+                // THEN add curve datasets
+                this.curves.forEach(curve => {
+                    const result = transforms.curves[curve.id];
+                    if (result) {
+                        const values = curve.isClipped ? result.clipped : result.raw;
+                        const label = this.getCurveLabel(curve);
+                        datasets.push({
+                            label: label,
+                            data: values,
+                            borderColor: COLOR_SCHEME[curve.color].line,
+                            backgroundColor: COLOR_SCHEME[curve.color].bg + '40',
+                            borderWidth: 2,
+                            tension: this.smoothLines ? 0.4 : 0,
+                            curveId: curve.id, // Add curve ID for tracking
+                            hidden: this.hiddenDatasets.has(curve.id)
+                        });
+                    }
+                });
+                
+                this.chart.data.datasets = datasets;
+                this.chart.update('none');
+                
+                // Re-render curves to update statistics
+                this.renderCurves();
+                
+                // Update equations
+                this.updateEquations();
+            }
             
             updateStats() {
                 const transforms = this.calculateTransforms();
@@ -1677,7 +1739,8 @@
                         backgroundColor: 'rgba(107, 114, 128, 0.1)',
                         borderWidth: 2,
                         tension: this.smoothLines ? 0.4 : 0,
-                        hidden: this.hiddenDatasets.has('Original (v)')
+                        curveId: 'original',
+                        hidden: this.hiddenDatasets.has('original')
                     }
                 ];
                 
@@ -1686,7 +1749,7 @@
                     const result = transforms.curves[curve.id];
                     if (result) {
                         const values = curve.isClipped ? result.clipped : result.raw;
-                        const label = TRANSFORM_REGISTRY[curve.method].displayName;
+                        const label = this.getCurveLabel(curve);
                         datasets.push({
                             label: label,
                             data: values,
@@ -1694,7 +1757,8 @@
                             backgroundColor: COLOR_SCHEME[curve.color].bg + '40',
                             borderWidth: 2,
                             tension: this.smoothLines ? 0.4 : 0,
-                            hidden: this.hiddenDatasets.has(label)
+                            curveId: curve.id,
+                            hidden: this.hiddenDatasets.has(curve.id)
                         });
                     }
                 });
@@ -1710,76 +1774,76 @@
             }
             
             updateEquations() {
-				let html = '';
-				
-				// Add equations for each curve
-				this.curves.forEach(curve => {
-					const registryEntry = TRANSFORM_REGISTRY[curve.method];
-					if (!registryEntry) {
-						html += `<div class="mb-4">
-							<div class="font-semibold">
-								<span style="color: ${COLOR_SCHEME[curve.color].line}">Unknown Transform (${curve.method}):</span>
-							</div>
-							<div class="pl-4 border-l-2" style="border-color: ${COLOR_SCHEME[curve.color].line}40">
-								<div class="text-red-600">Error: Transform method "${curve.method}" not found</div>
-							</div>
-						</div>`;
-						return; // Skip to next curve
-					}
-					const transformClass = registryEntry.class;
-					const transform = new transformClass();
-					const result = this.lastTransforms?.curves[curve.id];
-					
-					// Get parent color name for variable naming
-					let inputColor = null;
-					if (curve.parentId) {
-						const parentCurve = this.curves.find(c => c.id === curve.parentId);
-						inputColor = parentCurve ? parentCurve.color : null;
-					}
-					
-					// Prepare parameters for substitution
-					let equationParams = {};
-					if (curve.method === 'geometricAverage') {
-						const vWeighting = curve.parameters.vWeighting || 0;
-						let vWeight, targetWeight;
-						if (vWeighting >= 0) {
-							vWeight = 1 + vWeighting;
-							targetWeight = 1;
-						} else {
-							vWeight = 1;
-							targetWeight = 1 - vWeighting;
-						}
-						equationParams.wv = vWeight;
-						equationParams.wmu = targetWeight;
-					} else if (curve.method === 'power') {
-						equationParams.c = curve.parameters.compressionFactor || 2;
-					}
-					
-					const structure = transform.getEquationStructure();
-					const equationHtml = this.equationFormat === 'latex' ?
-						this.equationRenderer.renderLatex(structure, 'v', inputColor, curve.color, equationParams) :
-						this.equationRenderer.renderOriginal(structure, 'v', inputColor, curve.color, equationParams);
-					
-					html += `<div class="mb-4">
-						<div class="font-semibold">
-							<span style="color: ${COLOR_SCHEME[curve.color].line}">${TRANSFORM_REGISTRY[curve.method].displayName}:</span>
-						</div>
-						<div class="pl-4 border-l-2" style="border-color: ${COLOR_SCHEME[curve.color].line}40">
-							${equationHtml}
-							${curve.isClipped ? 
-								`<div class="text-gray-600 mt-1">${this.equationFormat === 'latex' ? 
-									katex.renderToString(`v_{${curve.color}} = \\text{clamp}(v_{${curve.color}}, 0, 1)`, { 
-										displayMode: false,
-										throwOnError: false 
-									}) : 
-									`v_${curve.color} = clamp(v_${curve.color},0,1)`}</div>` : 
-								''}
-						</div>
-					</div>`;
-				});
-				
-				this.dom.equationsDisplay.innerHTML = html;
-			}
+                let html = '';
+                
+                // Add equations for each curve
+                this.curves.forEach(curve => {
+                    const registryEntry = TRANSFORM_REGISTRY[curve.method];
+                    if (!registryEntry) {
+                        html += `<div class="mb-4">
+                            <div class="font-semibold">
+                                <span style="color: ${COLOR_SCHEME[curve.color].line}">Unknown Transform (${curve.method}):</span>
+                            </div>
+                            <div class="pl-4 border-l-2" style="border-color: ${COLOR_SCHEME[curve.color].line}40">
+                                <div class="text-red-600">Error: Transform method "${curve.method}" not found</div>
+                            </div>
+                        </div>`;
+                        return; // Skip to next curve
+                    }
+                    const transformClass = registryEntry.class;
+                    const transform = new transformClass();
+                    const result = this.lastTransforms?.curves[curve.id];
+                    
+                    // Get parent color name for variable naming
+                    let inputColor = null;
+                    if (curve.parentId) {
+                        const parentCurve = this.curves.find(c => c.id === curve.parentId);
+                        inputColor = parentCurve ? parentCurve.color : null;
+                    }
+                    
+                    // Prepare parameters for substitution
+                    let equationParams = {};
+                    if (curve.method === 'geometricAverage') {
+                        const vWeighting = curve.parameters.vWeighting || 0;
+                        let vWeight, targetWeight;
+                        if (vWeighting >= 0) {
+                            vWeight = 1 + vWeighting;
+                            targetWeight = 1;
+                        } else {
+                            vWeight = 1;
+                            targetWeight = 1 - vWeighting;
+                        }
+                        equationParams.wv = vWeight;
+                        equationParams.wmu = targetWeight;
+                    } else if (curve.method === 'power') {
+                        equationParams.c = curve.parameters.compressionFactor || 2;
+                    }
+                    
+                    const structure = transform.getEquationStructure();
+                    const equationHtml = this.equationFormat === 'latex' ?
+                        this.equationRenderer.renderLatex(structure, 'v', inputColor, curve.color, equationParams) :
+                        this.equationRenderer.renderOriginal(structure, 'v', inputColor, curve.color, equationParams);
+                    
+                    html += `<div class="mb-4">
+                        <div class="font-semibold">
+                            <span style="color: ${COLOR_SCHEME[curve.color].line}">${TRANSFORM_REGISTRY[curve.method].displayName}:</span>
+                        </div>
+                        <div class="pl-4 border-l-2" style="border-color: ${COLOR_SCHEME[curve.color].line}40">
+                            ${equationHtml}
+                            ${curve.isClipped ? 
+                                `<div class="text-gray-600 mt-1">${this.equationFormat === 'latex' ? 
+                                    katex.renderToString(`v_{${curve.color}} = \\text{clamp}(v_{${curve.color}}, 0, 1)`, { 
+                                        displayMode: false,
+                                        throwOnError: false 
+                                    }) : 
+                                    `v_${curve.color} = clamp(v_${curve.color},0,1)`}</div>` : 
+                                ''}
+                        </div>
+                    </div>`;
+                });
+                
+                this.dom.equationsDisplay.innerHTML = html;
+            }
             
             debounceUpdate() {
                 clearTimeout(this.updateTimer);
