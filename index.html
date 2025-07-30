@@ -862,6 +862,90 @@
 				};
 			}
 		}
+		
+		class LogSpaceBlend extends Transform {
+			constructor() {
+				super('logSpaceBlend', 'Log-Space Blend');
+			}
+			
+			canProduceOutOfRangeValues() {
+				return true;
+			}
+			
+			calculate(valuesArray, inputMean, targetMean, parameters = {}) {
+				const beta = parameters.beta || 0.5;
+				const shift = parameters.shift || 0;
+				
+				// Calculate the actual mean of input values
+				const vMean = valuesArray.reduce((sum, v) => sum + v, 0) / valuesArray.length;
+				
+				// Work in log space for better handling of multiplicative relationships
+				return valuesArray.map(v => {
+					if (v <= 0) return targetMean; // Handle non-positive values
+					
+					// Blend in log space
+					const logV = Math.log(v);
+					const logVMean = Math.log(vMean);
+					const logTargetMean = Math.log(targetMean);
+					
+					// Preserve heterogeneity in log space while shifting toward target
+					const logResult = logTargetMean + beta * (logV - logVMean) + shift;
+					
+					return Math.exp(logResult);
+				});
+			}
+			
+			getParameterDefinitions() {
+				return [
+					{
+						name: 'beta',
+						label: 'Heterogeneity Preservation (β)',
+						type: 'slider',
+						min: 0,
+						max: 2,
+						step: 0.05,
+						default: 0.5,
+						displayPrecision: 2,
+						description: '0 = flat (no variation), 1 = full variation, >1 = amplified'
+					},
+					{
+						name: 'shift',
+						label: 'Log Shift',
+						type: 'slider',
+						min: -1,
+						max: 1,
+						step: 0.05,
+						default: 0,
+						displayPrecision: 2,
+						description: 'Additional shift in log space'
+					}
+				];
+			}
+			
+			getDisplayInfo(valuesArray, inputMean, targetMean, parameters) {
+				const beta = parameters.beta || 0.5;
+				const shift = parameters.shift || 0;
+				
+				return {
+					extra: {
+						template: 'β: {beta}, shift: {shift}',
+						values: {
+							beta: { value: beta, precision: 2 },
+							shift: { value: shift, precision: 2 }
+						}
+					}
+				};
+			}
+			
+			getEquationStructure() {
+				return {
+					output: {
+						formula: 'exp(ln(μ_target) + β(ln(v) - ln(v̄)) + shift)'
+					}
+				};
+			}
+		}
+
 
         // Transform Registry
         const TRANSFORM_REGISTRY = {
@@ -889,6 +973,11 @@
 				displayName: 'Weighted Geometric Blend',
 				class: WeightedGeometricBlend,
 				defaultParameters: { vWeighting: 0 }
+			},
+			'logSpaceBlend': {
+				displayName: 'Log-Space Blend',
+				class: LogSpaceBlend,
+				defaultParameters: { beta: 0.5, shift: 0 }
 			}
 		};
 
@@ -1088,35 +1177,39 @@
             }
             
             renderCurve(curve) {
-                const indentLevel = this.getIndentationLevel(curve);
-                const indentClass = `ml-${indentLevel * 8}`;
-                const bgColor = COLOR_SCHEME[curve.color].bg;
-                const transform = new TRANSFORM_REGISTRY[curve.method].class();
-                const paramDefs = transform.getParameterDefinitions();
-                
-                // Get current transform results for display
-                const transforms = this.lastTransforms || this.calculateTransforms();
-                const result = transforms.curves[curve.id];
-                let statsDisplay = '';
-                
-                if (result) {
-                    const displayInfo = result.transform.getDisplayInfo(
-                        this.vArray, 
-                        result.inputMean, 
-                        this.muTarget, 
-                        curve.parameters
-                    );
-                    
-                    // Use actualMean which considers whether clipping is applied
-                    statsDisplay = `<span id="stats-${curve.id}" class="text-gray-700 text-sm ml-3">Mean: ${result.actualMean.toFixed(4)}`;
-                    if (displayInfo) {
-                        const extraHtml = this.equationRenderer.renderDisplayInfo(displayInfo);
-                        if (extraHtml) {
-                            statsDisplay += ` ${extraHtml}`;
-                        }
-                    }
-                    statsDisplay += '</span>';
-                }
+				const indentLevel = this.getIndentationLevel(curve);
+				const indentClass = `ml-${indentLevel * 8}`;
+				const bgColor = COLOR_SCHEME[curve.color].bg;
+				const registryEntry = TRANSFORM_REGISTRY[curve.method];
+				const paramDefs = registryEntry ? new registryEntry.class().getParameterDefinitions() : [];
+				
+				// Get current transform results for display
+				const transforms = this.lastTransforms || this.calculateTransforms();
+				const result = transforms.curves[curve.id];
+				let statsDisplay = '';
+				
+				if (result) {
+					if (result.error) {
+						statsDisplay = `<span id="stats-${curve.id}" class="text-red-600 text-sm ml-3">Error: ${result.error}</span>`;
+					} else if (result.transform) {
+						const displayInfo = result.transform.getDisplayInfo(
+							this.vArray, 
+							result.inputMean, 
+							this.muTarget, 
+							curve.parameters
+						);
+						
+						// Use actualMean which considers whether clipping is applied
+						statsDisplay = `<span id="stats-${curve.id}" class="text-gray-700 text-sm ml-3">Mean: ${result.actualMean.toFixed(4)}`;
+						if (displayInfo) {
+							const extraHtml = this.equationRenderer.renderDisplayInfo(displayInfo);
+							if (extraHtml) {
+								statsDisplay += ` ${extraHtml}`;
+							}
+						}
+						statsDisplay += '</span>';
+					}
+				}
                 
                 let parametersHtml = '';
                 if (paramDefs.length > 0) {
@@ -1159,6 +1252,7 @@
                                                 `<option value="${key}" ${curve.method === key ? 'selected' : ''}>${config.displayName}</option>`
                                             ).join('')}
                                         </select>
+                                        ${!registryEntry ? '<span class="text-red-600 text-xs ml-2">⚠ Invalid method!</span>' : ''}
                                         ${statsDisplay}
                                     </div>
                                     ${parametersHtml}
@@ -1383,42 +1477,59 @@
             }
             
             calculateTransforms() {
-                const results = {
-                    original: this.vArray,
-                    curves: {}
-                };
-                
-                const vMean = this.vArray.reduce((sum, v) => sum + v, 0) / this.vArray.length;
-                
-                // Process curves in order
-                this.curves.sort((a, b) => a.order - b.order).forEach(curve => {
-                    const transformClass = TRANSFORM_REGISTRY[curve.method].class;
-                    const transform = new transformClass();
-                    
-                    // Get input values
-                    let inputValues;
-                    let inputMean;
-                    
-                    if (curve.parentId) {
-                        // Use parent curve output
-                        const parentResult = results.curves[curve.parentId];
-                        if (parentResult) {
-                            inputValues = parentResult.clipped;
-                            inputMean = parentResult.actualMean;
-                        } else {
-                            // Fallback to original if parent not found
-                            inputValues = this.vArray;
-                            inputMean = vMean;
-                        }
-                    } else {
-                        // Use original values
-                        inputValues = this.vArray;
-                        inputMean = vMean;
-                    }
-                    
-                    // Calculate transform
-                    const rawValues = transform.calculate(inputValues, inputMean, this.muTarget, curve.parameters);
-                    const clippedValues = rawValues.map(v => transform.clamp(v));
+				const results = {
+					original: this.vArray,
+					curves: {}
+				};
+				
+				const vMean = this.vArray.reduce((sum, v) => sum + v, 0) / this.vArray.length;
+				
+				// Process curves in order
+				this.curves.sort((a, b) => a.order - b.order).forEach(curve => {
+					// Get input values FIRST (before checking registry)
+					let inputValues;
+					let inputMean;
+					
+					if (curve.parentId) {
+						// Use parent curve output
+						const parentResult = results.curves[curve.parentId];
+						if (parentResult) {
+							inputValues = parentResult.clipped;
+							inputMean = parentResult.actualMean;
+						} else {
+							// Fallback to original if parent not found
+							inputValues = this.vArray;
+							inputMean = vMean;
+						}
+					} else {
+						// Use original values
+						inputValues = this.vArray;
+						inputMean = vMean;
+					}
+					
+					// NOW check if the transform exists
+					const registryEntry = TRANSFORM_REGISTRY[curve.method];
+					if (!registryEntry) {
+						// Store error state for this curve
+						results.curves[curve.id] = {
+							error: `Transform method "${curve.method}" not found`,
+							raw: inputValues,
+							clipped: inputValues,
+							mean: inputMean,
+							actualMean: inputMean,
+							hasClipping: false,
+							transform: null,
+							inputMean: inputMean
+						};
+						return; // Skip to next curve
+					}
+					
+					const transformClass = registryEntry.class;
+					const transform = new transformClass();
+					
+					// Calculate transform
+					const rawValues = transform.calculate(inputValues, inputMean, this.muTarget, curve.parameters);
+					const clippedValues = rawValues.map(v => transform.clamp(v));
                     
                     // Calculate mean based on what will actually be used
                     const actualValues = curve.isClipped ? clippedValues : rawValues;
@@ -1444,31 +1555,31 @@
             }
             
             update() {
-                const transforms = this.calculateTransforms();
-                
-                // Update input data mean display
-                this.dom.inputDataMean.textContent = transforms.originalMean.toFixed(4);
-                
-                // Calculate y-axis range based on actual data points only
-                let minValue = 0;
-                let maxValue = 1;
-                
-                // Check original values
-                minValue = Math.min(minValue, ...this.vArray);
-                maxValue = Math.max(maxValue, ...this.vArray);
-                
-                // Check all curve values for range
-                this.curves.forEach(curve => {
-                    const result = transforms.curves[curve.id];
-                    if (result) {
-                        const values = curve.isClipped ? result.clipped : result.raw;
-                        minValue = Math.min(minValue, ...values);
-                        maxValue = Math.max(maxValue, ...values);
-                    }
-                });
-                
-                // Add padding
-                const range = maxValue - minValue;
+				const transforms = this.calculateTransforms();
+				
+				// Update input data mean display
+				this.dom.inputDataMean.textContent = transforms.originalMean.toFixed(4);
+				
+				// Calculate y-axis range based on actual data points only
+				let minValue = 0;
+				let maxValue = 1;
+				
+				// Check original values
+				minValue = Math.min(minValue, ...this.vArray);
+				maxValue = Math.max(maxValue, ...this.vArray);
+				
+				// Check all curve values for range
+				this.curves.forEach(curve => {
+					const result = transforms.curves[curve.id];
+					if (result) {
+						const values = curve.isClipped ? result.clipped : result.raw;
+						minValue = Math.min(minValue, ...values);
+						maxValue = Math.max(maxValue, ...values);
+					}
+				});
+				
+				// Add padding
+				const range = maxValue - minValue;
 				minValue = Math.max(0, minValue - range * 0.1);
 
 				// Only add padding to maxValue if it's not already at the natural boundary of 1
@@ -1477,51 +1588,52 @@
 				} else if (maxValue > 1) {
 					maxValue = maxValue + range * 0.1;
 				}
-                
-                // Update chart scale
-                this.chart.options.scales.y.min = minValue;
-                this.chart.options.scales.y.max = maxValue;
-                
-                // Update chart datasets
-                const datasets = [
-                    {
-                        label: 'Original (v)',
-                        data: this.vArray,
-                        borderColor: '#6B7280', // Dark grey
-                        backgroundColor: 'rgba(107, 114, 128, 0.1)',
-                        borderWidth: 2,
-                        tension: this.smoothLines ? 0.4 : 0,
-                        hidden: this.hiddenDatasets.has('Original (v)')
-                    }
-                ];
-                
-                // Add curve datasets
-                this.curves.forEach(curve => {
-                    const result = transforms.curves[curve.id];
-                    if (result) {
-                        const values = curve.isClipped ? result.clipped : result.raw;
-                        const label = TRANSFORM_REGISTRY[curve.method].displayName;
-                        datasets.push({
-                            label: label,
-                            data: values,
-                            borderColor: COLOR_SCHEME[curve.color].line,
-                            backgroundColor: COLOR_SCHEME[curve.color].bg + '40',
-                            borderWidth: 2,
-                            tension: this.smoothLines ? 0.4 : 0,
-                            hidden: this.hiddenDatasets.has(label)
-                        });
-                    }
-                });
-                
-                this.chart.data.datasets = datasets;
-                this.chart.update('none');
-                
-                // Re-render curves to update statistics
-                this.renderCurves();
-                
-                // Update equations
-                this.updateEquations();
-            }
+				
+				// Update chart scale
+				this.chart.options.scales.y.min = minValue;
+				this.chart.options.scales.y.max = maxValue;
+				
+				// DECLARE datasets array FIRST
+				const datasets = [
+					{
+						label: 'Original (v)',
+						data: this.vArray,
+						borderColor: '#6B7280', // Dark grey
+						backgroundColor: 'rgba(107, 114, 128, 0.1)',
+						borderWidth: 2,
+						tension: this.smoothLines ? 0.4 : 0,
+						hidden: this.hiddenDatasets.has('Original (v)')
+					}
+				];
+				
+				// THEN add curve datasets
+				this.curves.forEach(curve => {
+					const result = transforms.curves[curve.id];
+					if (result) {
+						const values = curve.isClipped ? result.clipped : result.raw;
+						const registryEntry = TRANSFORM_REGISTRY[curve.method];
+						const label = registryEntry ? registryEntry.displayName : `Unknown (${curve.method})`;
+						datasets.push({
+							label: label,
+							data: values,
+							borderColor: COLOR_SCHEME[curve.color].line,
+							backgroundColor: COLOR_SCHEME[curve.color].bg + '40',
+							borderWidth: 2,
+							tension: this.smoothLines ? 0.4 : 0,
+							hidden: this.hiddenDatasets.has(label)
+						});
+					}
+				});
+				
+				this.chart.data.datasets = datasets;
+				this.chart.update('none');
+				
+				// Re-render curves to update statistics
+				this.renderCurves();
+				
+				// Update equations
+				this.updateEquations();
+			}
             
             updateStats() {
                 const transforms = this.calculateTransforms();
@@ -1602,7 +1714,19 @@
 				
 				// Add equations for each curve
 				this.curves.forEach(curve => {
-					const transformClass = TRANSFORM_REGISTRY[curve.method].class;
+					const registryEntry = TRANSFORM_REGISTRY[curve.method];
+					if (!registryEntry) {
+						html += `<div class="mb-4">
+							<div class="font-semibold">
+								<span style="color: ${COLOR_SCHEME[curve.color].line}">Unknown Transform (${curve.method}):</span>
+							</div>
+							<div class="pl-4 border-l-2" style="border-color: ${COLOR_SCHEME[curve.color].line}40">
+								<div class="text-red-600">Error: Transform method "${curve.method}" not found</div>
+							</div>
+						</div>`;
+						return; // Skip to next curve
+					}
+					const transformClass = registryEntry.class;
 					const transform = new transformClass();
 					const result = this.lastTransforms?.curves[curve.id];
 					
@@ -1664,7 +1788,7 @@
             
             debounceUpdateStats() {
                 clearTimeout(this.updateStatsTimer);
-                this.updateStatsTimer = setTimeout(() => this.updateStats(), 5);
+                this.updateStatsTimer = setTimeout(() => this.updateStats(), 4);
             }
         }
         
